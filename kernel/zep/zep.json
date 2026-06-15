@@ -1,0 +1,13 @@
+{
+    "name": "kernel",
+    "version": "0.0.1",
+    "type": "library",
+    "target":[
+        {
+            "triple": "aarch64-unknown-none",
+            "linker": {
+                "flags": ""
+            }
+        }
+    ]
+}

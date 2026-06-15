@@ -1,0 +1,10 @@
+.idea/
+.vscode/
+.cache/
+
+build/
+out/
+cmake-build*/
+
+iso_root/
+*.iso

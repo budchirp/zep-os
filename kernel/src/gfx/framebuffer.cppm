@@ -2,9 +2,7 @@ export module zep.gfx.framebuffer;
 
 import zep.std.types;
 
-export namespace zep::gfx {
-
-class Framebuffer {
+export class Framebuffer {
   public:
     u8* base;
 
@@ -21,9 +19,7 @@ class Framebuffer {
         if (x >= width || y >= height) {
             return;
         }
-
         auto offset = y * pitch + x * 4;
-
         auto* pixel = reinterpret_cast<u32*>(base + offset);
         *pixel = color;
     }
@@ -37,12 +33,10 @@ class Framebuffer {
     }
 };
 
-extern "C" void zep_framebuffer_write(Framebuffer* framebuffer, u64 x, u64 y, u32 color) {
+export extern "C" void zep_framebuffer_write(Framebuffer* framebuffer, u64 x, u64 y, u32 color) {
     framebuffer->write(x, y, color);
 }
 
-extern "C" void zep_framebuffer_clear(Framebuffer* framebuffer, u32 color) {
+export extern "C" void zep_framebuffer_clear(Framebuffer* framebuffer, u32 color) {
     framebuffer->clear(color);
 }
-
-} // namespace zep::gfx

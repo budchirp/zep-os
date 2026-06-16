@@ -54,8 +54,9 @@ function(zep_set_kernel_flags TARGET KERNEL_TARGET LINKER_SCRIPT)
         -fno-stack-protector
         -fno-use-cxa-atexit
         -fno-threadsafe-statics
-        -mno-outline-atomics
-        -mgeneral-regs-only
+        -fno-builtin-memset
+        $<$<STREQUAL:${ZEP_ARCH},aarch64>:-mno-outline-atomics -mgeneral-regs-only>
+        $<$<STREQUAL:${ZEP_ARCH},x86_64>:-mcmodel=kernel>
         $<$<CONFIG:Debug>:-g -gdwarf-4 -O0 -fno-omit-frame-pointer -DZEP_DEBUG>
         $<$<CONFIG:Release>:-O2 -DNDEBUG -ffunction-sections -fdata-sections>
     )

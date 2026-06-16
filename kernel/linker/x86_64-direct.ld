@@ -1,14 +1,12 @@
 PHDRS
 {
-    text       PT_LOAD FILEHDR PHDRS;
-    rodata     PT_LOAD;
-    data       PT_LOAD;
-    limine_req PT_LOAD;
+    text  PT_LOAD FLAGS(5);
+    data  PT_LOAD FLAGS(6);
 }
 
 SECTIONS
 {
-    . = 0xffffffff80000000;
+    . = 0x40200000;
 
     .text : {
         KEEP(*(.text._start))
@@ -17,29 +15,34 @@ SECTIONS
 
     .rodata : {
         *(.rodata .rodata.*)
-    } :rodata
+    } :text
 
     .limine_requests : {
         KEEP(*(.limine_requests_start_marker))
         KEEP(*(.limine_requests))
         KEEP(*(.limine_requests_end_marker))
-    } :limine_req
+    } :text
+
+    . = ALIGN(4096);
 
     .data : {
         *(.data .data.*)
-    } :data
-
-    .bss : {
-        __bss_start = .;
-        *(COMMON)
-        *(.bss .bss.*)
-        __bss_end = .;
     } :data
 
     .init_array : {
         __init_array_start = .;
         KEEP(*(.init_array .init_array.*))
         __init_array_end = .;
+    } :data
+
+    .bss : {
+        __bss_start = .;
+        *(COMMON)
+        *(.bss .bss.*)
+        . = ALIGN(16);
+        stack_top = .;
+        . = . + 65536;
+        __bss_end = .;
     } :data
 
     /DISCARD/ : {

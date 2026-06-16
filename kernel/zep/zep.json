@@ -6,7 +6,13 @@
         {
             "triple": "aarch64-unknown-none",
             "linker": {
-                "flags": ""
+                "flags": "-static -nostdlib"
+            }
+        },
+        {
+            "triple": "x86_64-unknown-none",
+            "linker": {
+                "flags": "-static -nostdlib"
             }
         }
     ]

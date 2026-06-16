@@ -1,19 +1,17 @@
 export module zep.std.types;
 
-export namespace zep {
-using u8 = unsigned char;
-using u16 = unsigned short;
-using u32 = unsigned int;
-using u64 = unsigned long long;
+export using u8 = unsigned char;
+export using u16 = unsigned short;
+export using u32 = unsigned int;
+export using u64 = unsigned long long;
 
-using i8 = signed char;
-using i16 = signed short;
-using i32 = signed int;
-using i64 = signed long long;
+export using i8 = signed char;
+export using i16 = signed short;
+export using i32 = signed int;
+export using i64 = signed long long;
 
-using string = const char*;
+export using string = const char*;
 
-using usize = decltype(sizeof(0));
-using isize = decltype(static_cast<usize>(0) - static_cast<usize>(0));
-using uintptr = unsigned long long;
-} // namespace zep
+export using usize = decltype(sizeof(0));
+export using isize = decltype(static_cast<usize>(0) - static_cast<usize>(0));
+export using uintptr = unsigned long long;

@@ -3,9 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-namespace zep {
-
-class BootInfo {
+class LimineInfo {
   public:
     class Framebuffer {
       public:
@@ -33,9 +31,9 @@ class BootInfo {
         Type type;
     };
 
-    static BootInfo get();
+    static LimineInfo get();
 
-    explicit BootInfo()
+    explicit LimineInfo()
         : framebuffer{}, memory_map(nullptr), memory_map_count(0), cmdline(nullptr), rsdp(nullptr),
           dtb(nullptr), hhdm_offset(0) {}
 
@@ -47,5 +45,3 @@ class BootInfo {
     void* dtb;
     uint64_t hhdm_offset;
 };
-
-}

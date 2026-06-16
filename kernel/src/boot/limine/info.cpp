@@ -1,6 +1,6 @@
 #include "info.h"
 
-#include "limine/limine.h"
+#include "limine.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -19,11 +19,8 @@ volatile limine_base_revision_type limine_base_revision
     __attribute__((used, section(".limine_requests"))) = LIMINE_BASE_REVISION(6);
 
 static volatile limine_framebuffer_request framebuffer_request
-    __attribute__((section(".limine_requests"))) = {
-        .id = LIMINE_FRAMEBUFFER_REQUEST_ID,
-        .revision = 0,
-        .response = nullptr,
-};
+    __attribute__((section(".limine_requests"))) = {.id = LIMINE_FRAMEBUFFER_REQUEST_ID,
+                                                    .revision = 0};
 
 static volatile limine_memmap_request memmap_request
     __attribute__((section(".limine_requests"))) = {
@@ -48,10 +45,8 @@ static volatile limine_entry_point_request entry_point_request
         .entry = init,
 };
 
-namespace zep {
-
-BootInfo BootInfo::get() {
-    BootInfo info;
+LimineInfo LimineInfo::get() {
+    LimineInfo info;
 
     if (framebuffer_request.response != nullptr &&
         framebuffer_request.response->framebuffer_count > 0) {
@@ -71,7 +66,7 @@ BootInfo BootInfo::get() {
         auto count = memmap_request.response->entry_count;
         info.memory_map_count = count;
 
-        static BootInfo::MemoryRange translated[256];
+        static LimineInfo::MemoryRange translated[256];
 
         for (uint64_t i = 0; i < count && i < 256; ++i) {
             auto* entry = memmap_request.response->entries[i];
@@ -80,32 +75,32 @@ BootInfo BootInfo::get() {
 
             switch (entry->type) {
             case LIMINE_MEMMAP_USABLE:
-                translated[i].type = BootInfo::MemoryRange::Type::Usable;
+                translated[i].type = LimineInfo::MemoryRange::Type::Usable;
                 break;
             case LIMINE_MEMMAP_RESERVED:
             case LIMINE_MEMMAP_RESERVED_MAPPED:
-                translated[i].type = BootInfo::MemoryRange::Type::Reserved;
+                translated[i].type = LimineInfo::MemoryRange::Type::Reserved;
                 break;
             case LIMINE_MEMMAP_ACPI_RECLAIMABLE:
-                translated[i].type = BootInfo::MemoryRange::Type::AcpiReclaimable;
+                translated[i].type = LimineInfo::MemoryRange::Type::AcpiReclaimable;
                 break;
             case LIMINE_MEMMAP_ACPI_NVS:
-                translated[i].type = BootInfo::MemoryRange::Type::AcpiNvs;
+                translated[i].type = LimineInfo::MemoryRange::Type::AcpiNvs;
                 break;
             case LIMINE_MEMMAP_BAD_MEMORY:
-                translated[i].type = BootInfo::MemoryRange::Type::BadMemory;
+                translated[i].type = LimineInfo::MemoryRange::Type::BadMemory;
                 break;
             case LIMINE_MEMMAP_BOOTLOADER_RECLAIMABLE:
-                translated[i].type = BootInfo::MemoryRange::Type::BootloaderReclaimable;
+                translated[i].type = LimineInfo::MemoryRange::Type::BootloaderReclaimable;
                 break;
             case LIMINE_MEMMAP_EXECUTABLE_AND_MODULES:
-                translated[i].type = BootInfo::MemoryRange::Type::KernelModule;
+                translated[i].type = LimineInfo::MemoryRange::Type::KernelModule;
                 break;
             case LIMINE_MEMMAP_FRAMEBUFFER:
-                translated[i].type = BootInfo::MemoryRange::Type::Framebuffer;
+                translated[i].type = LimineInfo::MemoryRange::Type::Framebuffer;
                 break;
             default:
-                translated[i].type = BootInfo::MemoryRange::Type::Reserved;
+                translated[i].type = LimineInfo::MemoryRange::Type::Reserved;
                 break;
             }
         }
@@ -115,5 +110,3 @@ BootInfo BootInfo::get() {
 
     return info;
 }
-
-} // namespace zep

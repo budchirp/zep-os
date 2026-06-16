@@ -21,8 +21,8 @@ public struct Logger {
         fn print(str: cstr) -> void {
             if (terminal != null) {
                 terminal->print(str)
+            } else {
+                serial->write(str)
             }
-
-            serial->write(str)
         }
 }

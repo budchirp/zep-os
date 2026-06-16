@@ -13,13 +13,11 @@ import zep.gfx.framebuffer;
 alignas(Serial) static unsigned char serial_storage[sizeof(Serial)];
 alignas(Terminal) static unsigned char terminal_storage[sizeof(Terminal)];
 
-static Serial* serial_ptr = nullptr;
-static Terminal* terminal_ptr = nullptr;
+static Serial* serial = nullptr;
+static Terminal* terminal = nullptr;
 
 extern "C" {
 
-void* serial = nullptr;
-void* terminal = nullptr;
 void* __serial = nullptr;
 void* __terminal = nullptr;
 
@@ -28,11 +26,10 @@ extern void main();
 EFI_STATUS _entry(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_table) {
     (void)image_handle;
 
-    serial_ptr = new (serial_storage) Serial(system_table->ConOut);
-    serial = serial_ptr;
-    __serial = serial_ptr;
+    serial = new (serial_storage) Serial(system_table->ConOut);
+    __serial = serial;
 
-    serial_ptr->write_line("Zep OS: serial up");
+    serial->write_line("Zep OS: serial up");
 
     Framebuffer* framebuffer = nullptr;
     if (system_table != nullptr && system_table->BootServices != nullptr) {
@@ -55,23 +52,21 @@ EFI_STATUS _entry(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE* system_table) {
     }
 
     if (framebuffer != nullptr) {
-        terminal_ptr = new (terminal_storage) Terminal(*framebuffer);
-        terminal = terminal_ptr;
-        __terminal = terminal_ptr;
+        terminal = new (terminal_storage) Terminal(*framebuffer);
+        __terminal = terminal;
 
-        terminal_ptr->bg_color = Color::black();
-        terminal_ptr->fg_color = Color::white();
-        terminal_ptr->clear();
+        terminal->bg_color = Color::black();
+        terminal->fg_color = Color::white();
+        terminal->clear();
 
-        serial_ptr->write_line("Zep OS: framebuffer up");
+        serial->write_line("Zep OS: framebuffer up");
     } else {
-        terminal = nullptr;
         __terminal = nullptr;
 
-        serial_ptr->write_line("Zep OS: no framebuffer");
+        serial->write_line("Zep OS: no framebuffer");
     }
 
-    serial_ptr->write_line("Zep OS: boot complete");
+    serial->write_line("Zep OS: boot complete");
 
     main();
 

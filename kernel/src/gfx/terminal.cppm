@@ -82,6 +82,7 @@ export class Terminal {
 
     void clear() {
         framebuffer.clear(bg_color.value);
+
         cursor_x = 0;
         cursor_y = 0;
     }

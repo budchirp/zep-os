@@ -8,6 +8,10 @@ public struct Logger {
 
     public: 
         fn Logger(serial: *Serial, terminal: *Terminal) -> Logger {
+            if (terminal != null) {
+                terminal->clear()
+            }
+
             return Logger {
                 serial: serial,
                 terminal: terminal
@@ -17,8 +21,8 @@ public struct Logger {
         fn print(str: cstr) -> void {
             if (terminal != null) {
                 terminal->print(str)
-            } else {
-                serial->write(str)
             }
+
+            serial->write(str)
         }
 }

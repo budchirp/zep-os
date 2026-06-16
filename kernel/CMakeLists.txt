@@ -1,48 +1,124 @@
-set(KERNEL_TARGET "${ZEP_ARCH}-none-elf")
+if(ZEP_ARCH STREQUAL "x86_64")
+    set(KERNEL_TARGET "x86_64-none-elf")
 
-file(GLOB_RECURSE KERNEL_CPP CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-)
-list(FILTER KERNEL_CPP EXCLUDE REGEX "src/arch/(aarch64|x86_64)/.*")
+    set(OBJCOPY_INPUT_TARGET "elf64-x86-64")
+    set(OBJCOPY_OUTPUT_TARGET "efi-app-x86_64")
+    set(OBJCOPY_SECTIONS -j .text -j .sdata -j .data -j .dynamic -j .dynsym -j .rela -j .reloc -j .rodata)
 
-file(GLOB_RECURSE KERNEL_CPP_ARCH CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/arch/${ZEP_ARCH}/*.cpp"
-)
-list(APPEND KERNEL_CPP ${KERNEL_CPP_ARCH})
+    set(KERNEL_ARCH_DIR "arch/x86_64")
 
-file(GLOB_RECURSE KERNEL_CPPM CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cppm"
-)
-list(FILTER KERNEL_CPPM EXCLUDE REGEX "src/arch/(aarch64|x86_64)/.*")
+    set(KERNEL_ASM_CRT0
+        ${CMAKE_SOURCE_DIR}/third_party/gnu-efi/gnuefi/crt0-efi-x86_64.S
+    )
 
-file(GLOB_RECURSE KERNEL_CPPM_ARCH CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/arch/${ZEP_ARCH}/*.cppm"
-)
-list(APPEND KERNEL_CPPM ${KERNEL_CPPM_ARCH})
+    set(KERNEL_RELOC_C
+        ${CMAKE_SOURCE_DIR}/third_party/gnu-efi/gnuefi/reloc_x86_64.c
+    )
 
-include("${CMAKE_SOURCE_DIR}/cmake/Flags.cmake")
+    find_program(KERNEL_OBJCOPY REQUIRED NAMES objcopy llvm-objcopy)
+elseif(ZEP_ARCH STREQUAL "aarch64")
+    set(KERNEL_TARGET "aarch64-none-elf")
 
-set(ZEP_KERNEL_OBJECT "${CMAKE_CURRENT_SOURCE_DIR}/zep/build/${ZEP_ARCH}-unknown-none/objs/kernel.o")
-if(NOT EXISTS "${ZEP_KERNEL_OBJECT}")
-    set(ZEP_KERNEL_OBJECT "")
+    set(OBJCOPY_INPUT_TARGET "elf64-littleaarch64")
+    set(OBJCOPY_OUTPUT_TARGET "efi-app-aarch64")
+    set(OBJCOPY_SECTIONS -j .text -j .data -j .rodata -j .dynamic -j .dynsym -j .rela -j .reloc)
+
+    set(KERNEL_ARCH_DIR "arch/aarch64")
+
+    set(KERNEL_ASM_CRT0
+        ${CMAKE_SOURCE_DIR}/third_party/gnu-efi/gnuefi/crt0-efi-aarch64.S
+    )
+
+    set(KERNEL_RELOC_C
+        ${CMAKE_SOURCE_DIR}/third_party/gnu-efi/gnuefi/reloc_aarch64.c
+    )
+
+    find_program(KERNEL_OBJCOPY REQUIRED NAMES aarch64-linux-gnu-objcopy llvm-objcopy)
+else()
+    message(FATAL_ERROR "Unsupported ZEP_ARCH: ${ZEP_ARCH}")
 endif()
 
-add_executable(zep_kernel ${KERNEL_CPP} ${ZEP_KERNEL_OBJECT})
-if(KERNEL_CPPM)
-    target_sources(zep_kernel PUBLIC FILE_SET CXX_MODULES FILES ${KERNEL_CPPM})
-endif()
-target_include_directories(zep_kernel PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/boot/limine"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+set(KERNEL_LINKER_SCRIPT
+    ${CMAKE_SOURCE_DIR}/third_party/gnu-efi/gnuefi/elf_${ZEP_ARCH}_efi.lds
 )
-zep_set_kernel_flags(zep_kernel ${KERNEL_TARGET} "${CMAKE_CURRENT_SOURCE_DIR}/linker/${ZEP_ARCH}.ld")
 
-add_executable(zep_kernel_direct ${KERNEL_CPP})
-if(KERNEL_CPPM)
-    target_sources(zep_kernel_direct PUBLIC FILE_SET CXX_MODULES FILES ${KERNEL_CPPM})
-endif()
-target_include_directories(zep_kernel_direct PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/boot/limine"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+set(KERNEL_COMMON_MODULES
+    src/std/types.cppm
+    src/std/std.cppm
+    src/serial.cppm
+    src/gfx/color.cppm
+    src/gfx/font.cppm
+    src/gfx/framebuffer.cppm
+    src/gfx/terminal.cppm
 )
-zep_set_kernel_flags(zep_kernel_direct ${KERNEL_TARGET} "${CMAKE_CURRENT_SOURCE_DIR}/linker/${ZEP_ARCH}-direct.ld")
+
+set(KERNEL_COMMON_SOURCES
+    src/init.cpp
+    src/std/runtime.cpp
+)
+
+set(KERNEL_ARCH_SOURCES
+    src/${KERNEL_ARCH_DIR}/common/std.cpp
+)
+
+set(ZEP_OBJ
+    ${CMAKE_CURRENT_SOURCE_DIR}/zep/build/${ZEP_ARCH}-unknown-none/objs/kernel.o
+)
+
+if(DEFINED KERNEL_RELOC_C)
+    add_library(reloc_obj OBJECT ${KERNEL_RELOC_C})
+
+    target_include_directories(reloc_obj PRIVATE
+        ${CMAKE_SOURCE_DIR}/third_party/gnu-efi/inc
+        /usr/${ZEP_ARCH}-linux-gnu/include
+    )
+
+    target_compile_options(reloc_obj PRIVATE
+        -target ${KERNEL_TARGET}
+        $<$<STREQUAL:${ZEP_ARCH},x86_64>:-DGNU_EFI_USE_MS_ABI>
+        $<$<CONFIG:Debug>:-g -O0>
+        $<$<CONFIG:Release>:-O2 -DNDEBUG>
+    )
+endif()
+
+add_library(kernel_so SHARED
+    ${KERNEL_COMMON_SOURCES}
+    ${KERNEL_ARCH_SOURCES}
+    ${KERNEL_ASM_CRT0}
+)
+
+target_sources(kernel_so
+    PRIVATE
+        FILE_SET CXX_MODULES
+        FILES
+            ${KERNEL_COMMON_MODULES}
+)
+
+target_include_directories(kernel_so PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/third_party/gnu-efi/inc
+)
+
+zep_set_kernel_flags(kernel_so "${KERNEL_TARGET}" "${KERNEL_LINKER_SCRIPT}")
+
+if(DEFINED KERNEL_RELOC_C)
+    target_link_libraries(kernel_so PRIVATE reloc_obj)
+endif()
+
+if(EXISTS "${ZEP_OBJ}")
+    target_link_libraries(kernel_so PRIVATE "${ZEP_OBJ}")
+endif()
+
+add_custom_command(TARGET kernel_so POST_BUILD
+    COMMAND ${KERNEL_OBJCOPY}
+        --input-target=${OBJCOPY_INPUT_TARGET}
+        --output-target=${OBJCOPY_OUTPUT_TARGET}
+        --subsystem=10
+        ${OBJCOPY_SECTIONS}
+        "$<TARGET_FILE:kernel_so>"
+        "$<TARGET_FILE_DIR:kernel_so>/kernel.efi"
+    COMMENT "Generating kernel.efi from $<TARGET_FILE:kernel_so>"
+    VERBATIM
+)
+
+add_custom_target(kernel DEPENDS kernel_so)

@@ -47,6 +47,8 @@ function(zep_set_kernel_flags TARGET KERNEL_TARGET LINKER_SCRIPT)
 
     target_compile_options(${TARGET} PRIVATE
         -target ${KERNEL_TARGET}
+        -fpic
+        -fshort-wchar
         -ffreestanding
         -nostdlib
         -fno-rtti
@@ -55,9 +57,9 @@ function(zep_set_kernel_flags TARGET KERNEL_TARGET LINKER_SCRIPT)
         -fno-use-cxa-atexit
         -fno-threadsafe-statics
         -fno-builtin-memset
-        $<$<STREQUAL:${ZEP_ARCH},aarch64>:-mno-outline-atomics -mgeneral-regs-only>
-        $<$<STREQUAL:${ZEP_ARCH},x86_64>:-mcmodel=kernel>
-        $<$<CONFIG:Debug>:-g -gdwarf-4 -O0 -fno-omit-frame-pointer -DZEP_DEBUG>
+        $<$<STREQUAL:${ZEP_ARCH},aarch64>:-mgeneral-regs-only>
+        $<$<STREQUAL:${ZEP_ARCH},x86_64>:-mno-red-zone -DGNU_EFI_USE_MS_ABI>
+        $<$<CONFIG:Debug>:-g -O0 -fno-omit-frame-pointer -DZEP_DEBUG>
         $<$<CONFIG:Release>:-O2 -DNDEBUG -ffunction-sections -fdata-sections>
     )
 
@@ -65,12 +67,9 @@ function(zep_set_kernel_flags TARGET KERNEL_TARGET LINKER_SCRIPT)
         -target ${KERNEL_TARGET}
         -fuse-ld=lld
         -nostdlib
-        -static
         -T "${LINKER_SCRIPT}"
-        -Wl,-e,_start
-        -Wl,-Bstatic
+        -Wl,-shared
+        -Wl,-Bsymbolic
         -Wl,-z,norelro
-        -Wl,-z,max-page-size=0x1000
-        -Wl,--gc-sections
     )
 endfunction()

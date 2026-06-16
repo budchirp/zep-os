@@ -1,33 +1,38 @@
-ARCH      ?= aarch64
+ARCH      ?= x86_64
 PRESET    ?= debug-$(ARCH)
 BUILD_DIR ?= cmake-build-$(PRESET)
 
-KERNEL_ELF        := $(BUILD_DIR)/kernel/zep_kernel
-KERNEL_DIRECT_ELF := $(BUILD_DIR)/kernel/zep_kernel_direct
-ZEP_DIR           := kernel/zep
-ZEP_OBJ           := $(ZEP_DIR)/build/$(ARCH)-unknown-none/objs/kernel.o
-LIMINE_DIR        := iso_root
-ISO_DIR           := iso_root_$(ARCH)
-ISO_NAME          := zep-os-$(ARCH).iso
+ZEP_DIR    := kernel/zep
+ZEP_OBJ    := $(ZEP_DIR)/build/$(ARCH)-unknown-none/objs/kernel.o
+
+KERNEL_EFI := $(BUILD_DIR)/kernel/kernel.efi
+ESP_DIR    := esp_$(ARCH)
 
 QEMU_FLAGS := -m 256M -serial stdio
 
-QEMU_AARCH64_FLAGS := $(QEMU_FLAGS) -M virt -cpu cortex-a72
-QEMU_X86_64_FLAGS  := $(QEMU_FLAGS) -M q35
-
 ifeq ($(ARCH),aarch64)
-QEMU_FLAGS := $(QEMU_AARCH64_FLAGS)
-OBJCOPY := aarch64-linux-gnu-objcopy
-EFI_BOOT := BOOTAA64.EFI
-QEMU_BIOS := -bios /usr/share/edk2/aarch64/QEMU_EFI.fd
+OBJCOPY      := aarch64-linux-gnu-objcopy
+ARCH_SUFFIX  := AA64
+QEMU_MACHINE := -M virt -cpu cortex-a72
+QEMU_BIOS    := -bios /usr/share/edk2/aarch64/QEMU_EFI.fd
+QEMU_DRIVE   := -drive file=fat:rw:$(ESP_DIR),format=raw,media=disk
+
 else ifeq ($(ARCH),x86_64)
-QEMU_FLAGS := $(QEMU_X86_64_FLAGS)
-OBJCOPY := llvm-objcopy
-EFI_BOOT := BOOTX64.EFI
-QEMU_BIOS :=
+OBJCOPY      := objcopy
+ARCH_SUFFIX  := X64
+OVMF_CODE    := /usr/share/edk2/x64/OVMF_CODE.4m.fd
+OVMF_VARS    := $(ESP_DIR)/OVMF_VARS.fd
+
+QEMU_MACHINE := -M q35
+QEMU_DRIVE   := \
+	-drive if=pflash,format=raw,unit=0,file=$(OVMF_CODE),readonly=on \
+	-drive if=pflash,format=raw,unit=1,file=$(OVMF_VARS) \
+	-drive file=fat:rw:$(ESP_DIR),format=raw,media=disk
 endif
 
-.PHONY: build iso run run-direct debug clean
+BOOT_EFI := $(ESP_DIR)/EFI/BOOT/BOOT$(ARCH_SUFFIX).EFI
+
+.PHONY: build run clean zep
 
 build: zep
 	cmake --preset $(PRESET)
@@ -35,31 +40,25 @@ build: zep
 
 zep:
 	cd $(ZEP_DIR) && zep build --verbose
-	$(OBJCOPY) --globalize-symbol=serial \
+	$(OBJCOPY) \
+		--globalize-symbol=serial \
 		--globalize-symbol=terminal \
 		--globalize-symbol=framebuffer \
-		$(ZEP_OBJ) $(ZEP_OBJ)
+		$(ZEP_OBJ)
 
-iso: build
-	mkdir -p $(ISO_DIR)/boot $(ISO_DIR)/EFI/BOOT
-	cp $(KERNEL_ELF) $(ISO_DIR)/boot/
-	cp scripts/limine.conf $(ISO_DIR)/boot/
-	cp $(LIMINE_DIR)/$(EFI_BOOT) $(ISO_DIR)/EFI/BOOT/ 2>/dev/null || true
-	cp $(LIMINE_DIR)/limine-bios-cd.bin $(LIMINE_DIR)/limine-uefi-cd.bin $(ISO_DIR)/boot/ 2>/dev/null || true
-	xorriso -as mkisofs -b boot/limine-bios-cd.bin -no-emul-boot \
-		-boot-load-size 4 -boot-info-table \
-		--efi-boot boot/limine-uefi-cd.bin -efi-boot-part \
-		--efi-boot-image --protective-msdos-label \
-		$(ISO_DIR) -o /tmp/$(ISO_NAME) 2>/dev/null
+run: build
+	mkdir -p $(dir $(BOOT_EFI))
+	cp $(KERNEL_EFI) $(BOOT_EFI)
 
-run: iso
-	qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_BIOS) -cdrom /tmp/$(ISO_NAME) -display gtk
+ifeq ($(ARCH),x86_64)
+	test -f $(OVMF_VARS) || cp /usr/share/edk2/x64/OVMF_VARS.4m.fd $(OVMF_VARS)
+endif
 
-run-direct: build
-	qemu-system-$(ARCH) $(QEMU_FLAGS) -kernel $(KERNEL_DIRECT_ELF)
-
-debug: build
-	qemu-system-$(ARCH) $(QEMU_FLAGS) -kernel $(KERNEL_DIRECT_ELF) -s -S
+	qemu-system-$(ARCH) \
+		$(QEMU_MACHINE) \
+		$(QEMU_FLAGS) \
+		$(QEMU_BIOS) \
+		$(QEMU_DRIVE)
 
 clean:
-	rm -rf cmake-build-* /tmp/$(ISO_NAME)
+	rm -rf cmake-build-* esp_*

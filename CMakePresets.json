@@ -10,30 +10,7 @@
       "name": "base",
       "hidden": true,
       "binaryDir": "${sourceDir}/cmake-build-${presetName}",
-      "generator": "Ninja",
-      "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "clang++"
-      }
-    },
-    {
-      "name": "debug-aarch64",
-      "displayName": "Debug AArch64",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ZEP_ARCH": "aarch64",
-        "ZEP_BOOT_BACKEND": "limine"
-      }
-    },
-    {
-      "name": "release-aarch64",
-      "displayName": "Release AArch64",
-      "inherits": "base",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "ZEP_ARCH": "aarch64",
-        "ZEP_BOOT_BACKEND": "limine"
-      }
+      "generator": "Ninja"
     },
     {
       "name": "debug-x86_64",
@@ -42,24 +19,26 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ZEP_ARCH": "x86_64",
-        "ZEP_BOOT_BACKEND": "limine"
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_ASM_COMPILER": "clang"
       }
     },
     {
-      "name": "release-x86_64",
-      "displayName": "Release x86_64",
+      "name": "debug-aarch64",
+      "displayName": "Debug aarch64",
       "inherits": "base",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "ZEP_ARCH": "x86_64",
-        "ZEP_BOOT_BACKEND": "limine"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ZEP_ARCH": "aarch64",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_ASM_COMPILER": "clang"
       }
     }
   ],
   "buildPresets": [
-    { "name": "debug-aarch64", "configurePreset": "debug-aarch64" },
-    { "name": "release-aarch64", "configurePreset": "release-aarch64" },
     { "name": "debug-x86_64", "configurePreset": "debug-x86_64" },
-    { "name": "release-x86_64", "configurePreset": "release-x86_64" }
+    { "name": "debug-aarch64", "configurePreset": "debug-aarch64" }
   ]
 }

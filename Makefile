@@ -53,7 +53,7 @@ iso: build
 		$(ISO_DIR) -o /tmp/$(ISO_NAME) 2>/dev/null
 
 run: iso
-	qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_BIOS) -cdrom /tmp/$(ISO_NAME)
+	qemu-system-$(ARCH) $(QEMU_FLAGS) $(QEMU_BIOS) -cdrom /tmp/$(ISO_NAME) -display gtk
 
 run-direct: build
 	qemu-system-$(ARCH) $(QEMU_FLAGS) -kernel $(KERNEL_DIRECT_ELF)

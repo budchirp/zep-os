@@ -2,8 +2,7 @@ export module zep.std;
 
 import zep.std.types;
 
-export [[noreturn]] inline void panic(string str) {
-    (void)str;
+export [[noreturn]] inline void panic() {
     while (true) {
         __builtin_trap();
     }
@@ -11,8 +10,8 @@ export [[noreturn]] inline void panic(string str) {
 
 export [[noreturn]] void halt();
 
-export extern "C" void zep_panic(string str) {
-    panic(str);
+export extern "C" void zep_panic() {
+    panic();
 }
 
 export extern "C" void zep_halt() {

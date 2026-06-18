@@ -1,4 +1,4 @@
-import gfx.framebuffer { Framebuffer }
+import device.gpu.framebuffer { Framebuffer }
 
 public struct Terminal {
     public:

@@ -1,4 +1,4 @@
-export module zep.gfx.terminal.color;
+export module zep.gfx.color;
 
 import zep.std.types;
 

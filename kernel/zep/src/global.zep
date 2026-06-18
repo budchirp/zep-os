@@ -1,4 +1,4 @@
-import serial { Serial }
+import device.serial { Serial }
 import gfx.terminal { Terminal }
 import common.logger { Logger }
 

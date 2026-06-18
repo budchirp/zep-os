@@ -1,4 +1,4 @@
-#include "std/runtime.h"
+#include "runtime/runtime.h"
 
 #include <efi.h>
 #include <efiprot.h>
@@ -7,7 +7,8 @@ import zep.std.types;
 import zep.std;
 import zep.device.serial;
 import zep.gfx.terminal;
-import zep.device.display.framebuffer;
+import zep.gfx.renderer;
+import zep.device.gpu.framebuffer;
 
 static Serial* serial = nullptr;
 static Terminal* terminal = nullptr;
@@ -27,7 +28,9 @@ EFI_STATUS _entry(EFI_HANDLE, EFI_SYSTEM_TABLE* system_table) {
 
     auto framebuffer = init_framebuffer(system_table);
     if (framebuffer != nullptr) {
-        terminal = init_terminal(framebuffer);
+        auto renderer = init_renderer(framebuffer);
+
+        terminal = init_terminal(renderer, framebuffer->size());
         __terminal = terminal;
     } else {
         serial->write("Zep OS: no framebuffer\n");

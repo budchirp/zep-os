@@ -1,2 +1,2 @@
 CompileFlags:
-  CompilationDatabase: cmake-build-debug-aarch64
+  CompilationDatabase: cmake-build-debug-x86_64

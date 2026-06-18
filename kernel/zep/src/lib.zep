@@ -1,12 +1,9 @@
-import std { halt }
+import std { halt, print }
 
-import global { serial, terminal, logger }
+import context { Context }
 
-import common.logger { Logger }
-
-public fn main() -> never {
-    logger = Logger(serial, terminal)
-    logger.print("\nZep OS\n")
+public fn main(context: *Context) -> never {
+    print("Hi!")
 
     halt()
 }

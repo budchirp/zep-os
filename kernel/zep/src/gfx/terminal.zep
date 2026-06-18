@@ -1,16 +1,4 @@
-import device.gpu.framebuffer { Framebuffer }
-
 public struct Terminal {
-    public:
-        var framebuffer: *Framebuffer
-    
-    private:
-        var cursor_x: u64
-        var cursor_y: u64
-
-        var columns: u64
-        var rows: u64
-
     public:
         fn clear() -> void {
             zep_terminal_clear(self)

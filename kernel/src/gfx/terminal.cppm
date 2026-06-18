@@ -29,7 +29,7 @@ export class Terminal {
         }
     }
 
-    void print_char(char character) {
+    void print_char(char character, Color color) {
         if (character == '\n') {
             newline();
             return;
@@ -40,8 +40,8 @@ export class Terminal {
             return;
         }
 
-        renderer.glyph(Vec2u64(cursor.x * glyph_width, cursor.y * glyph_height), character,
-                       fg_color, bg_color);
+        renderer.glyph(Vec2u64(cursor.x * glyph_width, cursor.y * glyph_height), character, color,
+                       bg_color);
 
         cursor.x += 1;
 
@@ -64,11 +64,13 @@ export class Terminal {
         cursor = Vec2u64(0, 0);
     }
 
-    void print(string str) {
-        for (auto* character = str; *character != '\0'; ++character) {
-            print_char(*character);
+    void print(string str, Color color) {
+        for (const auto* character = str; *character != '\0'; ++character) {
+            print_char(*character, color);
         }
     }
+
+    void print(string str) { print(str, fg_color); }
 };
 
 alignas(Terminal) static unsigned char terminal_storage[sizeof(Terminal)];

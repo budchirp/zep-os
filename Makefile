@@ -3,7 +3,6 @@ PRESET    ?= debug-$(ARCH)
 BUILD_DIR ?= cmake-build-$(PRESET)
 
 ZEP_DIR    := kernel/zep
-ZEP_OBJ    := $(ZEP_DIR)/build/$(ARCH)-unknown-none/objs/kernel.o
 
 KERNEL_EFI := $(BUILD_DIR)/kernel/kernel.efi
 ESP_DIR    := esp_$(ARCH)
@@ -11,14 +10,12 @@ ESP_DIR    := esp_$(ARCH)
 QEMU_FLAGS := -m 256M -serial stdio
 
 ifeq ($(ARCH),aarch64)
-OBJCOPY      := aarch64-linux-gnu-objcopy
 ARCH_SUFFIX  := AA64
 QEMU_MACHINE := -M virt -cpu cortex-a72
 QEMU_BIOS    := -bios /usr/share/edk2/aarch64/QEMU_EFI.fd
 QEMU_DRIVE   := -drive file=fat:rw:$(ESP_DIR),format=raw,media=disk
 
 else ifeq ($(ARCH),x86_64)
-OBJCOPY      := objcopy
 ARCH_SUFFIX  := X64
 OVMF_CODE    := /usr/share/edk2/x64/OVMF_CODE.4m.fd
 OVMF_VARS    := $(ESP_DIR)/OVMF_VARS.fd
@@ -40,11 +37,6 @@ build: zep
 
 zep:
 	cd $(ZEP_DIR) && zep build --verbose
-	$(OBJCOPY) \
-		--globalize-symbol=serial \
-		--globalize-symbol=terminal \
-		--globalize-symbol=framebuffer \
-		$(ZEP_OBJ)
 
 run: build
 	mkdir -p $(dir $(BOOT_EFI))

@@ -1,15 +1,21 @@
+module;
+
+#include "std/runtime.h"
+
 export module zep.gfx.terminal;
 
 import zep.std.types;
-import zep.gfx.framebuffer;
+import zep.device.display.framebuffer;
 import zep.gfx.font;
-import zep.gfx.color;
+import zep.gfx.terminal.color;
 
 export class Terminal {
   private:
     Framebuffer& framebuffer;
+
     u64 cursor_x;
     u64 cursor_y;
+
     u64 columns;
     u64 rows;
 
@@ -93,6 +99,16 @@ export class Terminal {
         }
     }
 };
+
+alignas(Terminal) static unsigned char terminal_storage[sizeof(Terminal)];
+
+export Terminal* init_terminal(Framebuffer* framebuffer) {
+    auto terminal = new (terminal_storage) Terminal(*framebuffer);
+
+    terminal->clear();
+
+    return terminal;
+}
 
 export extern "C" void zep_terminal_clear(Terminal* terminal) {
     terminal->clear();

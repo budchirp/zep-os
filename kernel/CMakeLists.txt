@@ -42,23 +42,23 @@ set(KERNEL_LINKER_SCRIPT
     ${CMAKE_SOURCE_DIR}/third_party/gnu-efi/gnuefi/elf_${ZEP_ARCH}_efi.lds
 )
 
-set(KERNEL_COMMON_MODULES
-    src/std/types.cppm
-    src/std/std.cppm
-    src/serial.cppm
-    src/gfx/color.cppm
-    src/gfx/font.cppm
-    src/gfx/framebuffer.cppm
-    src/gfx/terminal.cppm
+file(GLOB_RECURSE KERNEL_COMMON_MODULES
+    CONFIGURE_DEPENDS
+    src/*.cppm
 )
 
-set(KERNEL_COMMON_SOURCES
-    src/init.cpp
-    src/std/runtime.cpp
+list(FILTER KERNEL_COMMON_MODULES EXCLUDE REGEX "src/arch/")
+
+file(GLOB_RECURSE KERNEL_COMMON_SOURCES
+    CONFIGURE_DEPENDS
+    src/*.cpp
 )
 
-set(KERNEL_ARCH_SOURCES
-    src/${KERNEL_ARCH_DIR}/common/std.cpp
+list(FILTER KERNEL_COMMON_SOURCES EXCLUDE REGEX "src/arch/")
+
+file(GLOB_RECURSE KERNEL_ARCH_SOURCES
+    CONFIGURE_DEPENDS
+    src/${KERNEL_ARCH_DIR}/*.cpp
 )
 
 set(ZEP_OBJ

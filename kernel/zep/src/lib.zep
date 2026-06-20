@@ -1,4 +1,4 @@
-import std { halt, print }
+import std { halt, print, kernel_allocate, kernel_deallocate }
 
 import context { Context }
 

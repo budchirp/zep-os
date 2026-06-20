@@ -7,7 +7,7 @@ ZEP_DIR    := kernel/zep
 KERNEL_EFI := $(BUILD_DIR)/kernel/kernel.efi
 ESP_DIR    := esp_$(ARCH)
 
-QEMU_FLAGS := -m 256M -serial stdio
+QEMU_FLAGS := -m 256M -serial stdio -drive file=fat32.img,if=none,id=drv0,format=raw -device nvme,drive=drv0,serial=1234
 
 ifeq ($(ARCH),aarch64)
 ARCH_SUFFIX  := AA64
@@ -38,7 +38,7 @@ build: zep
 zep:
 	cd $(ZEP_DIR) && zep build --verbose
 
-run: build
+run: build fat32.img
 	mkdir -p $(dir $(BOOT_EFI))
 	cp $(KERNEL_EFI) $(BOOT_EFI)
 
@@ -52,5 +52,12 @@ endif
 		$(QEMU_BIOS) \
 		$(QEMU_DRIVE)
 
+fat32.img:
+	dd if=/dev/zero of=fat32.img bs=1M count=33
+	mformat -F -i fat32.img ::
+	echo "Hello from FAT32 NVMe!" > hello_nvme.txt
+	mcopy -i fat32.img hello_nvme.txt ::HELLO.TXT
+	rm hello_nvme.txt
+
 clean:
-	rm -rf cmake-build-* esp_*
+	rm -rf cmake-build-* esp_* fat32.img

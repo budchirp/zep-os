@@ -8,3 +8,6 @@ cmake-build*/
 
 iso_root/
 *.iso
+fat32.img
+esp_*/
+.clangd/

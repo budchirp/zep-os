@@ -10,17 +10,23 @@ import zep.device;
 import zep.std.types;
 import zep.std.math;
 
-export class Framebuffer : Device {
+export class Framebuffer : public Device {
+  private:
   public:
-    u8* base;
+    using Device::write;
+
+    u8* front = nullptr;
+    u8* back = nullptr;
 
     Vec2u64 resolution;
 
     u64 pitch;
     u16 bpp;
 
-    explicit Framebuffer(void* address, Vec2u64 resolution, u64 pitch, u16 bpp)
-        : base(static_cast<u8*>(address)), resolution(resolution), pitch(pitch), bpp(bpp) {}
+    explicit Framebuffer(u8* front, u8* back, Vec2u64 resolution, u64 pitch, u16 bpp)
+        : front(front), back(back), resolution(resolution), pitch(pitch), bpp(bpp) {}
+
+    ~Framebuffer() override = default;
 
     string name() override { return "framebuffer"; }
 
@@ -29,8 +35,9 @@ export class Framebuffer : Device {
             return;
         }
 
-        auto offset = position.y * pitch + position.x * 4;
-        *reinterpret_cast<u32*>(base + offset) = color;
+        u64 offset = position.y * pitch + position.x * 4;
+
+        *reinterpret_cast<u32*>(back + offset) = color;
     }
 
     void clear(u32 color) {
@@ -44,9 +51,11 @@ export class Framebuffer : Device {
     Vec2u64 size() const { return resolution; }
 };
 
-alignas(Framebuffer) static unsigned char framebuffer_storage[sizeof(Framebuffer)];
-
 export Framebuffer* init_framebuffer(EFI_SYSTEM_TABLE* system_table) {
+    if (system_table == nullptr) {
+        return nullptr;
+    }
+
     EFI_GUID guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 
     EFI_GRAPHICS_OUTPUT_PROTOCOL* gop = nullptr;
@@ -59,12 +68,18 @@ export Framebuffer* init_framebuffer(EFI_SYSTEM_TABLE* system_table) {
         return nullptr;
     }
 
-    auto address = reinterpret_cast<void*>(static_cast<uintptr>(gop->Mode->FrameBufferBase));
+    u8* front = reinterpret_cast<u8*>(static_cast<uintptr>(gop->Mode->FrameBufferBase));
 
-    auto resolution = Vec2u64(static_cast<u64>(gop->Mode->Info->HorizontalResolution),
-                              static_cast<u64>(gop->Mode->Info->VerticalResolution));
+    Vec2u64 resolution = Vec2u64(static_cast<u64>(gop->Mode->Info->HorizontalResolution),
+                                 static_cast<u64>(gop->Mode->Info->VerticalResolution));
 
-    auto pitch = static_cast<u64>(gop->Mode->Info->PixelsPerScanLine) * 4;
+    u64 pitch = static_cast<u64>(gop->Mode->Info->PixelsPerScanLine) * 4;
 
-    return new (framebuffer_storage) Framebuffer(address, resolution, pitch, 32);
+    u8* back = new u8[pitch * resolution.y];
+
+    if (back == nullptr) {
+        return nullptr;
+    }
+
+    return new Framebuffer(front, back, resolution, pitch, 32);
 }

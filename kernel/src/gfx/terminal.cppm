@@ -60,6 +60,7 @@ export class Terminal {
 
     void clear() {
         renderer.clear(bg_color);
+        renderer.sync();
 
         cursor = Vec2u64(0, 0);
     }
@@ -68,6 +69,8 @@ export class Terminal {
         for (const auto* character = str; *character != '\0'; ++character) {
             print_char(*character, color);
         }
+
+        renderer.sync();
     }
 
     void print(string str) { print(str, fg_color); }

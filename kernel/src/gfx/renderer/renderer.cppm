@@ -23,6 +23,18 @@ export class Renderer {
 
     void pixel(Vec2u64 position, Color color) { framebuffer.write(position, color.value); }
 
+    void sync() {
+        if (framebuffer.front == nullptr || framebuffer.back == nullptr) {
+            return;
+        }
+
+        usize total = framebuffer.resolution.y * framebuffer.pitch;
+
+        for (usize i = 0; i < total; ++i) {
+            framebuffer.front[i] = framebuffer.back[i];
+        }
+    }
+
     void rect(Vec2u64 position, Vec2u64 size, Color color) {
         for (u64 y = 0; y < size.y; ++y) {
             for (u64 x = 0; x < size.x; ++x) {

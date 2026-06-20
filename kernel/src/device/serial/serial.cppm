@@ -9,7 +9,7 @@ export module zep.device.serial;
 import zep.device;
 import zep.std.types;
 
-export class Serial : Device {
+export class Serial : public Device {
   private:
     SIMPLE_TEXT_OUTPUT_INTERFACE* con_out;
 
@@ -28,6 +28,8 @@ export class Serial : Device {
     }
 
   public:
+    using Device::write;
+
     explicit Serial(SIMPLE_TEXT_OUTPUT_INTERFACE* con_out) : con_out(con_out) {}
 
     string name() override { return "serial"; }

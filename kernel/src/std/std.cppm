@@ -3,8 +3,8 @@ export module zep.std;
 import zep.std.types;
 import zep.context;
 
-export void print(string str) {
-    auto context = get_context();
+export extern "C" void print(string str) {
+    auto* context = get_context();
 
     context->logger->print(str);
 }

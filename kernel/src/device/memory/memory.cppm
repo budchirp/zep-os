@@ -9,6 +9,8 @@ export module zep.memory;
 import zep.std.types;
 import zep.device;
 
+extern "C" [[noreturn]] void panic(string str);
+
 export class PageAllocator {
   private:
     EFI_BOOT_SERVICES* boot_services = nullptr;
@@ -42,9 +44,13 @@ export class PageAllocator {
     }
 };
 
-class MemoryBlock {
-  private:
+constexpr u32 BLOCK_MAGIC_ALLOCATED = 0xA110CA7E;
+constexpr u32 BLOCK_MAGIC_FREE = 0xFEEDFACE;
+constexpr usize HEAP_GROWTH_PAGES = 256;
+
+class alignas(16) MemoryBlock {
   public:
+    u32 magic = 0;
     usize size = 0;
     bool is_free = true;
     MemoryBlock* next = nullptr;
@@ -54,11 +60,54 @@ class MemoryBlock {
 export class HeapAllocator {
   private:
     MemoryBlock* head = nullptr;
+    PageAllocator* page_allocator = nullptr;
+
+    MemoryBlock* find_tail() {
+        MemoryBlock* curr = head;
+
+        while (curr != nullptr && curr->next != nullptr) {
+            curr = curr->next;
+        }
+
+        return curr;
+    }
+
+    bool grow() {
+        if (page_allocator == nullptr) {
+            return false;
+        }
+
+        void* new_region = page_allocator->allocate_pages(HEAP_GROWTH_PAGES);
+        if (new_region == nullptr) {
+            return false;
+        }
+
+        usize region_size = HEAP_GROWTH_PAGES * 4096;
+
+        auto* new_block = reinterpret_cast<MemoryBlock*>(new_region);
+        new_block->magic = BLOCK_MAGIC_FREE;
+        new_block->size = region_size - sizeof(MemoryBlock);
+        new_block->is_free = true;
+        new_block->next = nullptr;
+        new_block->prev = nullptr;
+
+        MemoryBlock* tail = find_tail();
+        if (tail != nullptr) {
+            tail->next = new_block;
+            new_block->prev = tail;
+        } else {
+            head = new_block;
+        }
+
+        return true;
+    }
 
   public:
-    explicit HeapAllocator(void* memory_start, usize memory_size) {
+    explicit HeapAllocator(void* memory_start, usize memory_size, PageAllocator* page_allocator)
+        : page_allocator(page_allocator) {
         if (memory_start != nullptr && memory_size > sizeof(MemoryBlock)) {
             head = reinterpret_cast<MemoryBlock*>(memory_start);
+            head->magic = BLOCK_MAGIC_FREE;
             head->size = memory_size - sizeof(MemoryBlock);
             head->is_free = true;
             head->next = nullptr;
@@ -73,32 +122,41 @@ export class HeapAllocator {
 
         usize aligned_size = (size + 15) & ~static_cast<usize>(15);
 
-        MemoryBlock* curr = head;
+        for (usize attempt = 0; attempt < 2; ++attempt) {
+            MemoryBlock* curr = head;
 
-        while (curr != nullptr) {
-            if (curr->is_free && curr->size >= aligned_size) {
-                if (curr->size >= aligned_size + sizeof(MemoryBlock) + 16) {
-                    MemoryBlock* next_block = reinterpret_cast<MemoryBlock*>(
-                        reinterpret_cast<u8*>(curr) + sizeof(MemoryBlock) + aligned_size);
-                    next_block->size = curr->size - aligned_size - sizeof(MemoryBlock);
-                    next_block->is_free = true;
-                    next_block->next = curr->next;
-                    next_block->prev = curr;
+            while (curr != nullptr) {
+                if (curr->is_free && curr->size >= aligned_size) {
+                    if (curr->size >= aligned_size + sizeof(MemoryBlock) + 16) {
+                        auto* next_block = reinterpret_cast<MemoryBlock*>(
+                            reinterpret_cast<u8*>(curr) + sizeof(MemoryBlock) + aligned_size);
+                        next_block->magic = BLOCK_MAGIC_FREE;
+                        next_block->size = curr->size - aligned_size - sizeof(MemoryBlock);
+                        next_block->is_free = true;
+                        next_block->next = curr->next;
+                        next_block->prev = curr;
 
-                    if (curr->next != nullptr) {
-                        curr->next->prev = next_block;
+                        if (curr->next != nullptr) {
+                            curr->next->prev = next_block;
+                        }
+
+                        curr->next = next_block;
+                        curr->size = aligned_size;
                     }
 
-                    curr->next = next_block;
-                    curr->size = aligned_size;
+                    curr->is_free = false;
+                    curr->magic = BLOCK_MAGIC_ALLOCATED;
+
+                    return reinterpret_cast<void*>(reinterpret_cast<u8*>(curr) +
+                                                   sizeof(MemoryBlock));
                 }
 
-                curr->is_free = false;
-
-                return reinterpret_cast<void*>(reinterpret_cast<u8*>(curr) + sizeof(MemoryBlock));
+                curr = curr->next;
             }
 
-            curr = curr->next;
+            if (attempt == 0 && !grow()) {
+                return nullptr;
+            }
         }
 
         return nullptr;
@@ -109,9 +167,19 @@ export class HeapAllocator {
             return;
         }
 
-        MemoryBlock* curr =
+        auto* curr =
             reinterpret_cast<MemoryBlock*>(reinterpret_cast<u8*>(block) - sizeof(MemoryBlock));
+
+        if (curr->magic == BLOCK_MAGIC_FREE) {
+            panic("double free detected");
+        }
+
+        if (curr->magic != BLOCK_MAGIC_ALLOCATED) {
+            panic("heap corruption: invalid block magic");
+        }
+
         curr->is_free = true;
+        curr->magic = BLOCK_MAGIC_FREE;
 
         if (curr->next != nullptr && curr->next->is_free) {
             curr->size += sizeof(MemoryBlock) + curr->next->size;
@@ -134,10 +202,12 @@ export class HeapAllocator {
 };
 
 static HeapAllocator* global_heap = nullptr;
+
 alignas(HeapAllocator) static u8 heap_allocator_storage[sizeof(HeapAllocator)];
 
-export void init_heap(void* memory_start, usize memory_size) {
-    global_heap = new (heap_allocator_storage) HeapAllocator(memory_start, memory_size);
+export void init_heap(void* memory_start, usize memory_size, PageAllocator* page_allocator) {
+    global_heap =
+        new (heap_allocator_storage) HeapAllocator(memory_start, memory_size, page_allocator);
 }
 
 export HeapAllocator* get_heap() {
@@ -146,10 +216,15 @@ export HeapAllocator* get_heap() {
 
 export extern "C" void* kernel_allocate(usize size) {
     if (global_heap == nullptr) {
-        return nullptr;
+        panic("kernel_allocate called before heap init");
     }
 
-    return global_heap->allocate(size);
+    void* result = global_heap->allocate(size);
+    if (result == nullptr) {
+        panic("out of memory");
+    }
+
+    return result;
 }
 
 export extern "C" void kernel_deallocate(void* block) {
@@ -160,56 +235,92 @@ export extern "C" void kernel_deallocate(void* block) {
     global_heap->free(block);
 }
 
-export class MemoryDevice : public Device {
+export class MemoryMapEntry {
+  public:
+    u32 type = 0;
+    u64 physical_start = 0;
+    u64 num_pages = 0;
+    u64 attribute = 0;
+};
+
+export class MemoryMap {
   private:
-    u8* buffer = nullptr;
-    usize buffer_size = 0;
+    MemoryMapEntry* entries = nullptr;
+    usize entry_count = 0;
+    usize map_key = 0;
 
   public:
-    explicit MemoryDevice(u8* buffer, usize buffer_size)
-        : buffer(buffer), buffer_size(buffer_size) {}
+    MemoryMap() = default;
 
-    ~MemoryDevice() override = default;
+    bool capture(EFI_SYSTEM_TABLE* system_table) {
+        UINTN map_size = 0;
+        UINTN descriptor_size = 0;
+        UINT32 descriptor_version = 0;
+        UINTN key = 0;
 
-    string name() override { return "ram0"; }
+        system_table->BootServices->GetMemoryMap(&map_size, nullptr, &key, &descriptor_size,
+                                                 &descriptor_version);
 
-    u8* get_buffer() { return buffer; }
+        map_size += 2 * descriptor_size;
 
-    usize get_size() const { return buffer_size; }
-
-    usize read(usize offset, u8* dest, usize size) override {
-        if (offset >= buffer_size || dest == nullptr) {
-            return 0;
+        auto* raw_map = new u8[map_size];
+        if (raw_map == nullptr) {
+            return false;
         }
 
-        usize bytes_to_read = size;
+        EFI_STATUS status = system_table->BootServices->GetMemoryMap(
+            &map_size, reinterpret_cast<EFI_MEMORY_DESCRIPTOR*>(raw_map), &key, &descriptor_size,
+            &descriptor_version);
 
-        if (offset + size > buffer_size) {
-            bytes_to_read = buffer_size - offset;
+        if (status != EFI_SUCCESS) {
+            delete[] raw_map;
+            return false;
         }
 
-        for (usize i = 0; i < bytes_to_read; ++i) {
-            dest[i] = buffer[offset + i];
+        map_key = key;
+        entry_count = map_size / descriptor_size;
+
+        entries = new MemoryMapEntry[entry_count];
+        if (entries == nullptr) {
+            delete[] raw_map;
+            return false;
         }
 
-        return bytes_to_read;
+        for (usize i = 0; i < entry_count; ++i) {
+            auto* desc = reinterpret_cast<EFI_MEMORY_DESCRIPTOR*>(raw_map + i * descriptor_size);
+            entries[i].type = desc->Type;
+            entries[i].physical_start = desc->PhysicalStart;
+            entries[i].num_pages = desc->NumberOfPages;
+            entries[i].attribute = desc->Attribute;
+        }
+
+        delete[] raw_map;
+
+        return true;
     }
 
-    usize write(usize offset, const u8* src, usize size) override {
-        if (offset >= buffer_size || src == nullptr) {
-            return 0;
+    usize count() const { return entry_count; }
+
+    usize key() const { return map_key; }
+
+    MemoryMapEntry* get(usize index) {
+        if (index >= entry_count || entries == nullptr) {
+            return nullptr;
         }
 
-        usize bytes_to_write = size;
-
-        if (offset + size > buffer_size) {
-            bytes_to_write = buffer_size - offset;
-        }
-
-        for (usize i = 0; i < bytes_to_write; ++i) {
-            buffer[offset + i] = src[i];
-        }
-
-        return bytes_to_write;
+        return &entries[index];
     }
 };
+
+alignas(MemoryMap) static u8 memory_map_storage[sizeof(MemoryMap)];
+
+export MemoryMap* init_memory_map(EFI_SYSTEM_TABLE* system_table) {
+    auto* map = new (memory_map_storage) MemoryMap();
+
+    if (!map->capture(system_table)) {
+        return nullptr;
+    }
+
+    return map;
+}
+

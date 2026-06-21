@@ -39,15 +39,28 @@ EFI_STATUS _entry(void* image, EFI_SYSTEM_TABLE* system_table) {
 
     context->device_manager = init_device_manager();
 
-    PageAllocator page_allocator(system_table->BootServices);
+    constexpr usize HEAP_PAGES = 4096;
+    constexpr usize HEAP_SIZE = HEAP_PAGES * 4096;
 
-    void* heap_mem = page_allocator.allocate_pages(4096);
+    alignas(PageAllocator) static u8 page_alloc_storage[sizeof(PageAllocator)];
+    auto* page_allocator = new (page_alloc_storage) PageAllocator(system_table->BootServices);
+
+    void* heap_mem = page_allocator->allocate_pages(HEAP_PAGES);
 
     if (heap_mem == nullptr) {
         panic("Failed to allocate heap memory");
     }
 
-    init_heap(heap_mem, 16 * 1024 * 1024);
+    init_heap(heap_mem, HEAP_SIZE, page_allocator);
+
+    context->logger->log("heap up");
+
+    MemoryMap* memory_map = init_memory_map(system_table);
+    if (memory_map == nullptr) {
+        panic("Failed to capture UEFI memory map");
+    }
+
+    context->logger->log("memory map captured");
 
     Framebuffer* framebuffer = init_framebuffer(system_table);
     if (framebuffer != nullptr) {
@@ -65,6 +78,7 @@ EFI_STATUS _entry(void* image, EFI_SYSTEM_TABLE* system_table) {
     if (nvme == nullptr) {
         panic("Failed to initialize NVMe driver");
     }
+
     context->device_manager->add(nvme);
 
     Fat32FileSystem* fat_fs = new Fat32FileSystem(nvme);

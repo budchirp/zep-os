@@ -9,7 +9,7 @@ import zep.device.serial;
 import zep.gfx.terminal;
 import zep.gfx.renderer;
 import zep.gfx.color;
-import zep.device.gpu.framebuffer;
+import zep.device.graphics;
 import zep.std.math;
 import zep.context;
 import zep.common.logger;
@@ -19,6 +19,7 @@ import zep.fs;
 import zep.fs.fat;
 import zep.device.nvme;
 import zep.std.string_view;
+import zep.test;
 
 extern "C" {
 
@@ -39,86 +40,28 @@ EFI_STATUS _entry(void* image, EFI_SYSTEM_TABLE* system_table) {
 
     context->device_manager = init_device_manager();
 
-    constexpr usize HEAP_PAGES = 4096;
-    constexpr usize HEAP_SIZE = HEAP_PAGES * 4096;
-
-    alignas(PageAllocator) static u8 page_alloc_storage[sizeof(PageAllocator)];
-    auto* page_allocator = new (page_alloc_storage) PageAllocator(system_table->BootServices);
-
-    void* heap_mem = page_allocator->allocate_pages(HEAP_PAGES);
-
-    if (heap_mem == nullptr) {
-        panic("Failed to allocate heap memory");
-    }
-
-    init_heap(heap_mem, HEAP_SIZE, page_allocator);
-
-    context->logger->log("heap up");
-
-    MemoryMap* memory_map = init_memory_map(system_table);
-    if (memory_map == nullptr) {
-        panic("Failed to capture UEFI memory map");
-    }
-
+    init_memory(system_table);
     context->logger->log("memory map captured");
 
-    Framebuffer* framebuffer = init_framebuffer(system_table);
-    if (framebuffer != nullptr) {
-        context->device_manager->add(framebuffer);
+    init_graphics(system_table);
 
-        context->renderer = init_renderer(framebuffer);
-        context->logger->terminal = init_terminal(context->renderer, framebuffer->size());
-
-        context->logger->log("framebuffer up");
-    } else {
-        context->logger->log("no framebuffer");
-    }
-
-    NvmeDriver* nvme = init_nvme(system_table);
+    auto* nvme = init_nvme(system_table);
     if (nvme == nullptr) {
         panic("Failed to initialize NVMe driver");
     }
-
     context->device_manager->add(nvme);
 
-    Fat32FileSystem* fat_fs = new Fat32FileSystem(nvme);
+    auto* fat_fs = new Fat32FileSystem(nvme);
     if (!fat_fs->init()) {
         panic("Failed to initialize FAT32 filesystem");
     }
 
     context->device_manager->add(StringView("fat"), fat_fs);
 
-    FileSystem* fs = new FileSystem(fat_fs);
-
+    auto* fs = new FileSystem(fat_fs);
     context->device_manager->add(StringView("fs"), fs);
 
-    context->logger->log("Verifying FileSystem middle-man APIs...");
-
-    u8 read_buffer[64] = {0};
-
-    usize bytes_read = fs->read(StringView("HELLO.TXT"), 0, read_buffer, 63);
-
-    read_buffer[bytes_read] = '\0';
-
-    context->logger->log("HELLO.TXT read via FileSystem:");
-
-    context->logger->log(reinterpret_cast<string>(read_buffer));
-
-    context->logger->log("Creating NEWFILE.TXT...");
-
-    if (fs->create(StringView("NEWFILE.TXT"))) {
-        context->logger->log("NEWFILE.TXT created successfully!");
-    } else {
-        context->logger->log("Failed to create NEWFILE.TXT!");
-    }
-
-    context->logger->log("Deleting NEWFILE.TXT...");
-
-    if (fs->remove(StringView("NEWFILE.TXT"))) {
-        context->logger->log("NEWFILE.TXT deleted successfully!");
-    } else {
-        context->logger->log("Failed to delete NEWFILE.TXT!");
-    }
+    test_fat_filesystem();
 
     context->logger->log("boot complete");
 

@@ -7,7 +7,6 @@ export module zep.context;
 import zep.device.serial;
 import zep.gfx.terminal;
 import zep.gfx.renderer;
-import zep.device.gpu.framebuffer;
 import zep.common.logger;
 import zep.device;
 

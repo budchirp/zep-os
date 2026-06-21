@@ -313,6 +313,7 @@ export class MemoryMap {
 };
 
 alignas(MemoryMap) static u8 memory_map_storage[sizeof(MemoryMap)];
+static MemoryMap* global_memory_map = nullptr;
 
 export MemoryMap* init_memory_map(EFI_SYSTEM_TABLE* system_table) {
     auto* map = new (memory_map_storage) MemoryMap();
@@ -323,4 +324,43 @@ export MemoryMap* init_memory_map(EFI_SYSTEM_TABLE* system_table) {
 
     return map;
 }
+
+static PageAllocator* global_page_allocator = nullptr;
+alignas(PageAllocator) static u8 page_alloc_storage[sizeof(PageAllocator)];
+
+export PageAllocator* init_page_allocator(EFI_BOOT_SERVICES* boot_services) {
+    global_page_allocator = new (page_alloc_storage) PageAllocator(boot_services);
+    return global_page_allocator;
+}
+
+export PageAllocator* get_page_allocator() {
+    return global_page_allocator;
+}
+
+export MemoryMap* get_memory_map() {
+    return global_memory_map;
+}
+
+export void init_memory(EFI_SYSTEM_TABLE* system_table) {
+    constexpr usize HEAP_PAGES = 4096;
+    constexpr usize HEAP_SIZE = HEAP_PAGES * 4096;
+
+    PageAllocator* page_allocator = init_page_allocator(system_table->BootServices);
+    if (page_allocator == nullptr) {
+        panic("Failed to initialize PageAllocator");
+    }
+
+    void* heap_mem = page_allocator->allocate_pages(HEAP_PAGES);
+    if (heap_mem == nullptr) {
+        panic("Failed to allocate heap memory");
+    }
+
+    init_heap(heap_mem, HEAP_SIZE, page_allocator);
+
+    global_memory_map = init_memory_map(system_table);
+    if (global_memory_map == nullptr) {
+        panic("Failed to capture UEFI memory map");
+    }
+}
+
 

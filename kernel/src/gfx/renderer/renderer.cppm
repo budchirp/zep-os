@@ -7,7 +7,7 @@ export module zep.gfx.renderer;
 import zep.std.types;
 import zep.std.math;
 
-import zep.device.gpu.framebuffer;
+import zep.device.graphics.framebuffer;
 
 import zep.gfx.font;
 import zep.gfx.color;

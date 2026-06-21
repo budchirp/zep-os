@@ -4,7 +4,7 @@ module;
 
 #include <efi.h>
 
-export module zep.device.gpu.framebuffer;
+export module zep.device.graphics.framebuffer;
 
 import zep.device;
 import zep.std.types;

@@ -191,40 +191,6 @@ export class HeapAllocator {
     }
 };
 
-static HeapAllocator* global_heap = nullptr;
-alignas(HeapAllocator) static u8 heap_allocator_storage[sizeof(HeapAllocator)];
-
-static void init_heap(void* memory_start, usize memory_size, PageAllocator* page_allocator) {
-    global_heap =
-        new (heap_allocator_storage) HeapAllocator(memory_start, memory_size, page_allocator);
-}
-
-export HeapAllocator* get_heap() {
-    return global_heap;
-}
-
-export extern "C" void* kernel_allocate(usize size) {
-    if (global_heap == nullptr) {
-        panic("kernel_allocate called before heap init");
-    }
-
-    void* result = global_heap->allocate(size);
-
-    if (result == nullptr) {
-        panic("out of memory");
-    }
-
-    return result;
-}
-
-export extern "C" void kernel_deallocate(void* block) {
-    if (global_heap == nullptr || block == nullptr) {
-        return;
-    }
-
-    global_heap->free(block);
-}
-
 export class MemoryMap {
   private:
     MemoryMapEntry* entries = nullptr;
@@ -253,39 +219,53 @@ export class MemoryMap {
     }
 };
 
+alignas(HeapAllocator) static u8 heap_allocator_storage[sizeof(HeapAllocator)];
 alignas(MemoryMap) static u8 memory_map_storage[sizeof(MemoryMap)];
-static MemoryMap* global_memory_map = nullptr;
-
-export MemoryMap* get_memory_map() {
-    return global_memory_map;
-}
-
-static PageAllocator* global_page_allocator = nullptr;
 alignas(PageAllocator) static u8 page_alloc_storage[sizeof(PageAllocator)];
 
-static PageAllocator* init_page_allocator(void* (*alloc_cb)(usize), void (*free_cb)(void*, usize)) {
-    global_page_allocator = new (page_alloc_storage) PageAllocator(alloc_cb, free_cb);
-    return global_page_allocator;
+export HeapAllocator* get_heap() {
+    return reinterpret_cast<HeapAllocator*>(heap_allocator_storage);
+}
+
+export extern "C" void* kernel_allocate(usize size) {
+    auto* heap = get_heap();
+
+    void* result = heap->allocate(size);
+
+    if (result == nullptr) {
+        panic("out of memory");
+    }
+
+    return result;
+}
+
+export extern "C" void kernel_deallocate(void* block) {
+    auto* heap = get_heap();
+    if (block == nullptr) {
+        return;
+    }
+
+    heap->free(block);
+}
+
+export MemoryMap* get_memory_map() {
+    return reinterpret_cast<MemoryMap*>(memory_map_storage);
 }
 
 export PageAllocator* get_page_allocator() {
-    return global_page_allocator;
+    return reinterpret_cast<PageAllocator*>(page_alloc_storage);
 }
 
 export void init_memory(BootInfo* boot_info) {
-    PageAllocator* page_allocator =
-        init_page_allocator(boot_info->pages.allocate, boot_info->pages.free);
-    if (page_allocator == nullptr) {
-        panic("Failed to initialize PageAllocator");
-    }
+    new (page_alloc_storage) PageAllocator(boot_info->pages.allocate, boot_info->pages.free);
 
     if (boot_info->heap.memory == nullptr) {
         panic("Failed to get heap memory from loader");
     }
 
-    init_heap(boot_info->heap.memory, boot_info->heap.size, page_allocator);
+    new (heap_allocator_storage) HeapAllocator(boot_info->heap.memory, boot_info->heap.size, get_page_allocator());
 
-    global_memory_map = new (memory_map_storage) MemoryMap();
-    global_memory_map->init(boot_info->memory_map.entries, boot_info->memory_map.count,
-                            boot_info->memory_map.key);
+    auto* memory_map = new (memory_map_storage) MemoryMap();
+    memory_map->init(boot_info->memory_map.entries, boot_info->memory_map.count,
+                     boot_info->memory_map.key);
 }

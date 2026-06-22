@@ -12,12 +12,24 @@ import zep.context;
 import zep.common.logger;
 import zep.device;
 import zep.memory;
+import zep.memory.vmm;
+import zep.system.gdt;
+import zep.system.interrupts;
+import zep.system.scheduler;
 import zep.fs;
 import zep.fs.fat;
 import zep.device.nvme;
 import zep.std.string_view;
 import zep.test;
 import zep.boot.info;
+
+static void test_thread_entry() {
+    auto* context = get_context();
+    context->logger->log("hello from test thread 1");
+    thread_yield();
+    context->logger->log("hello again from test thread 1");
+    thread_yield();
+}
 
 extern "C" {
 
@@ -34,10 +46,19 @@ void kernel_init(BootInfo* boot_info) {
 
     context->logger->log("serial up");
 
+    GdtManager::init();
+    context->logger->log("gdt/tss up");
+
     context->device_manager = init_device_manager();
 
     init_memory(boot_info);
     context->logger->log("memory map captured");
+
+    init_vmm(boot_info);
+    context->logger->log("vmm up");
+
+    InterruptManager::init();
+    context->logger->log("idt/interrupts up");
 
     init_graphics(boot_info);
 
@@ -69,6 +90,21 @@ void kernel_init(BootInfo* boot_info) {
     context->device_manager->add(StringView("fs"), fs);
 
     test_fat_filesystem();
+
+    context->logger->log("scheduler test starting...");
+
+    Thread main_thread;
+    Thread test_thread(test_thread_entry);
+
+    Scheduler::add_thread(&main_thread);
+    Scheduler::add_thread(&test_thread);
+
+    thread_yield();
+    context->logger->log("back in main thread");
+    thread_yield();
+    context->logger->log("back in main thread again");
+
+    context->logger->log("scheduler test complete");
 
     context->logger->log("boot complete");
 

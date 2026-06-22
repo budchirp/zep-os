@@ -36,7 +36,7 @@ build: zep
 	cmake --build $(BUILD_DIR)
 
 zep:
-	cd $(ZEP_DIR) && zep build --verbose
+	cd $(ZEP_DIR) && zep build
 
 run: build fat32.img
 	mkdir -p $(dir $(BOOT_EFI))

@@ -2,8 +2,6 @@ module;
 
 #include "runtime/runtime.h"
 
-#include <efi.h>
-
 export module zep.device.graphics.framebuffer;
 
 import zep.device;
@@ -50,36 +48,3 @@ export class Framebuffer : public Device {
 
     Vec2u64 size() const { return resolution; }
 };
-
-export Framebuffer* init_framebuffer(EFI_SYSTEM_TABLE* system_table) {
-    if (system_table == nullptr) {
-        return nullptr;
-    }
-
-    EFI_GUID guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
-
-    EFI_GRAPHICS_OUTPUT_PROTOCOL* gop = nullptr;
-
-    EFI_STATUS status =
-        system_table->BootServices->LocateProtocol(&guid, nullptr, reinterpret_cast<VOID**>(&gop));
-
-    if (status != EFI_SUCCESS || gop == nullptr || gop->Mode == nullptr ||
-        gop->Mode->Info == nullptr) {
-        return nullptr;
-    }
-
-    u8* front = reinterpret_cast<u8*>(static_cast<uintptr>(gop->Mode->FrameBufferBase));
-
-    Vec2u64 resolution = Vec2u64(static_cast<u64>(gop->Mode->Info->HorizontalResolution),
-                                 static_cast<u64>(gop->Mode->Info->VerticalResolution));
-
-    u64 pitch = static_cast<u64>(gop->Mode->Info->PixelsPerScanLine) * 4;
-
-    u8* back = new u8[pitch * resolution.y];
-
-    if (back == nullptr) {
-        return nullptr;
-    }
-
-    return new Framebuffer(front, back, resolution, pitch, 32);
-}

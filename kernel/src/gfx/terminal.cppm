@@ -85,11 +85,3 @@ export Terminal* init_terminal(Renderer* renderer, Vec2u64 resolution) {
 
     return terminal;
 }
-
-export extern "C" void zep_terminal_clear(Terminal* terminal) {
-    terminal->clear();
-}
-
-export extern "C" void zep_terminal_print(Terminal* terminal, string str) {
-    terminal->print(str);
-}

@@ -2,45 +2,35 @@ module;
 
 #include "runtime/runtime.h"
 
-#include <efi.h>
-
 export module zep.memory;
 
 import zep.std.types;
 import zep.device;
+import zep.boot.info;
 
 extern "C" [[noreturn]] void panic(string str);
 
 export class PageAllocator {
   private:
-    EFI_BOOT_SERVICES* boot_services = nullptr;
+    void* (*alloc_cb)(usize) = nullptr;
+    void (*free_cb)(void*, usize) = nullptr;
 
   public:
-    explicit PageAllocator(EFI_BOOT_SERVICES* boot_services) : boot_services(boot_services) {}
+    explicit PageAllocator(void* (*alloc_cb)(usize), void (*free_cb)(void*, usize))
+        : alloc_cb(alloc_cb), free_cb(free_cb) {}
 
     void* allocate_pages(usize count) {
-        if (boot_services == nullptr) {
+        if (alloc_cb == nullptr) {
             return nullptr;
         }
-
-        EFI_PHYSICAL_ADDRESS physical_address = 0;
-
-        EFI_STATUS status =
-            boot_services->AllocatePages(AllocateAnyPages, EfiLoaderData, count, &physical_address);
-
-        if (status != EFI_SUCCESS) {
-            return nullptr;
-        }
-
-        return reinterpret_cast<void*>(physical_address);
+        return alloc_cb(count);
     }
 
     void free_pages(void* block, usize count) {
-        if (boot_services == nullptr || block == nullptr) {
+        if (free_cb == nullptr || block == nullptr) {
             return;
         }
-
-        boot_services->FreePages(reinterpret_cast<EFI_PHYSICAL_ADDRESS>(block), count);
+        free_cb(block, count);
     }
 };
 
@@ -202,10 +192,9 @@ export class HeapAllocator {
 };
 
 static HeapAllocator* global_heap = nullptr;
-
 alignas(HeapAllocator) static u8 heap_allocator_storage[sizeof(HeapAllocator)];
 
-export void init_heap(void* memory_start, usize memory_size, PageAllocator* page_allocator) {
+static void init_heap(void* memory_start, usize memory_size, PageAllocator* page_allocator) {
     global_heap =
         new (heap_allocator_storage) HeapAllocator(memory_start, memory_size, page_allocator);
 }
@@ -220,6 +209,7 @@ export extern "C" void* kernel_allocate(usize size) {
     }
 
     void* result = global_heap->allocate(size);
+
     if (result == nullptr) {
         panic("out of memory");
     }
@@ -235,14 +225,6 @@ export extern "C" void kernel_deallocate(void* block) {
     global_heap->free(block);
 }
 
-export class MemoryMapEntry {
-  public:
-    u32 type = 0;
-    u64 physical_start = 0;
-    u64 num_pages = 0;
-    u64 attribute = 0;
-};
-
 export class MemoryMap {
   private:
     MemoryMapEntry* entries = nullptr;
@@ -252,51 +234,10 @@ export class MemoryMap {
   public:
     MemoryMap() = default;
 
-    bool capture(EFI_SYSTEM_TABLE* system_table) {
-        UINTN map_size = 0;
-        UINTN descriptor_size = 0;
-        UINT32 descriptor_version = 0;
-        UINTN key = 0;
-
-        system_table->BootServices->GetMemoryMap(&map_size, nullptr, &key, &descriptor_size,
-                                                 &descriptor_version);
-
-        map_size += 2 * descriptor_size;
-
-        auto* raw_map = new u8[map_size];
-        if (raw_map == nullptr) {
-            return false;
-        }
-
-        EFI_STATUS status = system_table->BootServices->GetMemoryMap(
-            &map_size, reinterpret_cast<EFI_MEMORY_DESCRIPTOR*>(raw_map), &key, &descriptor_size,
-            &descriptor_version);
-
-        if (status != EFI_SUCCESS) {
-            delete[] raw_map;
-            return false;
-        }
-
+    void init(MemoryMapEntry* entries_ptr, usize count, usize key) {
+        entries = entries_ptr;
+        entry_count = count;
         map_key = key;
-        entry_count = map_size / descriptor_size;
-
-        entries = new MemoryMapEntry[entry_count];
-        if (entries == nullptr) {
-            delete[] raw_map;
-            return false;
-        }
-
-        for (usize i = 0; i < entry_count; ++i) {
-            auto* desc = reinterpret_cast<EFI_MEMORY_DESCRIPTOR*>(raw_map + i * descriptor_size);
-            entries[i].type = desc->Type;
-            entries[i].physical_start = desc->PhysicalStart;
-            entries[i].num_pages = desc->NumberOfPages;
-            entries[i].attribute = desc->Attribute;
-        }
-
-        delete[] raw_map;
-
-        return true;
     }
 
     usize count() const { return entry_count; }
@@ -315,21 +256,15 @@ export class MemoryMap {
 alignas(MemoryMap) static u8 memory_map_storage[sizeof(MemoryMap)];
 static MemoryMap* global_memory_map = nullptr;
 
-export MemoryMap* init_memory_map(EFI_SYSTEM_TABLE* system_table) {
-    auto* map = new (memory_map_storage) MemoryMap();
-
-    if (!map->capture(system_table)) {
-        return nullptr;
-    }
-
-    return map;
+export MemoryMap* get_memory_map() {
+    return global_memory_map;
 }
 
 static PageAllocator* global_page_allocator = nullptr;
 alignas(PageAllocator) static u8 page_alloc_storage[sizeof(PageAllocator)];
 
-export PageAllocator* init_page_allocator(EFI_BOOT_SERVICES* boot_services) {
-    global_page_allocator = new (page_alloc_storage) PageAllocator(boot_services);
+static PageAllocator* init_page_allocator(void* (*alloc_cb)(usize), void (*free_cb)(void*, usize)) {
+    global_page_allocator = new (page_alloc_storage) PageAllocator(alloc_cb, free_cb);
     return global_page_allocator;
 }
 
@@ -337,30 +272,20 @@ export PageAllocator* get_page_allocator() {
     return global_page_allocator;
 }
 
-export MemoryMap* get_memory_map() {
-    return global_memory_map;
-}
-
-export void init_memory(EFI_SYSTEM_TABLE* system_table) {
-    constexpr usize HEAP_PAGES = 4096;
-    constexpr usize HEAP_SIZE = HEAP_PAGES * 4096;
-
-    PageAllocator* page_allocator = init_page_allocator(system_table->BootServices);
+export void init_memory(BootInfo* boot_info) {
+    PageAllocator* page_allocator =
+        init_page_allocator(boot_info->pages.allocate, boot_info->pages.free);
     if (page_allocator == nullptr) {
         panic("Failed to initialize PageAllocator");
     }
 
-    void* heap_mem = page_allocator->allocate_pages(HEAP_PAGES);
-    if (heap_mem == nullptr) {
-        panic("Failed to allocate heap memory");
+    if (boot_info->heap.memory == nullptr) {
+        panic("Failed to get heap memory from loader");
     }
 
-    init_heap(heap_mem, HEAP_SIZE, page_allocator);
+    init_heap(boot_info->heap.memory, boot_info->heap.size, page_allocator);
 
-    global_memory_map = init_memory_map(system_table);
-    if (global_memory_map == nullptr) {
-        panic("Failed to capture UEFI memory map");
-    }
+    global_memory_map = new (memory_map_storage) MemoryMap();
+    global_memory_map->init(boot_info->memory_map.entries, boot_info->memory_map.count,
+                            boot_info->memory_map.key);
 }
-
-

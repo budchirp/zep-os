@@ -11,26 +11,29 @@ import zep.std.types;
 
 export class Serial : public Device {
   private:
-    SIMPLE_TEXT_OUTPUT_INTERFACE* con_out;
+    void write_raw(char byte) {
+#if defined(__x86_64__)
+        __asm__ volatile("outb %0, %1"
+                         :
+                         : "a"(static_cast<u8>(byte)), "Nd"(static_cast<u16>(0x3f8)));
+#elif defined(__aarch64__)
+        *reinterpret_cast<volatile u32*>(0x09000000) = static_cast<u32>(byte);
+#else
+        (void)byte;
+#endif
+    }
 
     void write_char(char byte) {
-        CHAR16 buf[3];
-        u8 len = 0;
-
         if (byte == '\n') {
-            buf[len++] = u'\r';
+            write_raw('\r');
         }
-
-        buf[len++] = static_cast<CHAR16>(byte);
-        buf[len] = u'\0';
-
-        con_out->OutputString(con_out, buf);
+        write_raw(byte);
     }
 
   public:
     using Device::write;
 
-    explicit Serial(SIMPLE_TEXT_OUTPUT_INTERFACE* con_out) : con_out(con_out) {}
+    explicit Serial(void* con_out) { (void)con_out; }
 
     string name() override { return "serial"; }
 
@@ -43,10 +46,6 @@ export class Serial : public Device {
 
 alignas(Serial) static unsigned char serial_storage[sizeof(Serial)];
 
-export Serial* init_serial(EFI_SYSTEM_TABLE* system_table) {
-    return new (serial_storage) Serial(system_table->ConOut);
-}
-
-export extern "C" void zep_serial_write(Serial* serial, string str) {
-    serial->write(str);
+export Serial* init_serial(void* con_out) {
+    return new (serial_storage) Serial(con_out);
 }

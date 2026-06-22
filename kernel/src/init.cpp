@@ -1,8 +1,5 @@
 #include "runtime/runtime.h"
 
-#include <efi.h>
-#include <efiprot.h>
-
 import zep.std.types;
 import zep.std;
 import zep.device.serial;
@@ -20,38 +17,48 @@ import zep.fs.fat;
 import zep.device.nvme;
 import zep.std.string_view;
 import zep.test;
+import zep.boot.info;
 
 extern "C" {
 
-extern u64 main(Context* context);
+extern void main(Context* context);
 
-EFI_STATUS _entry(void* image, EFI_SYSTEM_TABLE* system_table) {
-    (void)image;
-
+void kernel_init(BootInfo* boot_info) {
     init_context();
     auto* context = get_context();
 
     context->logger = init_logger();
 
-    Serial* serial = init_serial(system_table);
+    Serial* serial = init_serial(boot_info->console);
     context->logger->serial = serial;
 
     context->logger->log("serial up");
 
     context->device_manager = init_device_manager();
 
-    init_memory(system_table);
+    init_memory(boot_info);
     context->logger->log("memory map captured");
 
-    init_graphics(system_table);
+    init_graphics(boot_info);
 
-    auto* nvme = init_nvme(system_table);
-    if (nvme == nullptr) {
-        panic("Failed to initialize NVMe driver");
+    NvmeDriver* primary_disk = nullptr;
+    for (usize i = 0; i < boot_info->disk_count; ++i) {
+        auto* nvme = init_nvme(boot_info->disks[i].address, boot_info->disks[i].size);
+        if (nvme == nullptr) {
+            panic("Failed to initialize NVMe driver");
+        }
+
+        context->device_manager->add(nvme);
+        if (primary_disk == nullptr) {
+            primary_disk = nvme;
+        }
     }
-    context->device_manager->add(nvme);
 
-    auto* fat_fs = new Fat32FileSystem(nvme);
+    if (primary_disk == nullptr) {
+        panic("No NVMe disk found");
+    }
+
+    auto* fat_fs = new Fat32FileSystem(primary_disk);
     if (!fat_fs->init()) {
         panic("Failed to initialize FAT32 filesystem");
     }
@@ -72,7 +79,5 @@ EFI_STATUS _entry(void* image, EFI_SYSTEM_TABLE* system_table) {
     }
 
     main(context);
-
-    return EFI_SUCCESS;
 }
 }

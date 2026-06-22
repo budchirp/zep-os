@@ -5,6 +5,7 @@ module;
 export module zep.gfx.terminal;
 
 import zep.std.types;
+import zep.std.string_view;
 import zep.std.math;
 
 import zep.gfx.renderer;
@@ -65,15 +66,15 @@ export class Terminal {
         cursor = Vec2u64(0, 0);
     }
 
-    void print(string str, Color color) {
-        for (const auto* character = str; *character != '\0'; ++character) {
-            print_char(*character, color);
+    void print(StringView str, Color color) {
+        for (usize i = 0; i < str.length(); ++i) {
+            print_char(str.data[i], color);
         }
 
         renderer.sync();
     }
 
-    void print(string str) { print(str, fg_color); }
+    void print(StringView str) { print(str, fg_color); }
 };
 
 alignas(Terminal) static unsigned char terminal_storage[sizeof(Terminal)];

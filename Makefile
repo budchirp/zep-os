@@ -2,7 +2,9 @@ ARCH      ?= x86_64
 PRESET    ?= debug-$(ARCH)
 BUILD_DIR ?= cmake-build-$(PRESET)
 
-ZEP_DIR    := kernel/zep
+USER_DIR   := examples/app
+LIBC_DIR   := libc
+USER_ELF   := $(BUILD_DIR)/user.elf
 
 KERNEL_EFI := $(BUILD_DIR)/kernel/kernel.efi
 ESP_DIR    := esp_$(ARCH)
@@ -29,14 +31,17 @@ endif
 
 BOOT_EFI := $(ESP_DIR)/EFI/BOOT/BOOT$(ARCH_SUFFIX).EFI
 
-.PHONY: build run clean zep
+.PHONY: build run clean userspace
 
-build: zep
+build:
 	cmake --preset $(PRESET)
 	cmake --build $(BUILD_DIR)
+	$(MAKE) userspace
 
-zep:
-	cd $(ZEP_DIR) && zep build
+userspace:
+	cd $(USER_DIR) && zep build
+	mkdir -p $(dir $(USER_ELF))
+	ld.lld -e main -Ttext 0x400000 -static -nostdlib -o $(USER_ELF) $(USER_DIR)/build/$(ARCH)-unknown-none/objs/user_app.o $(BUILD_DIR)/libc/libzep_libc.a
 
 run: build fat32.img
 	mkdir -p $(dir $(BOOT_EFI))
@@ -52,12 +57,30 @@ endif
 		$(QEMU_BIOS) \
 		$(QEMU_DRIVE)
 
-fat32.img:
+fat32.img: userspace
 	dd if=/dev/zero of=fat32.img bs=1M count=33
 	mformat -F -i fat32.img ::
+	mmd -i fat32.img ::System
+	mmd -i fat32.img ::System/Binaries
+	mmd -i fat32.img ::System/Libraries
+	mmd -i fat32.img ::Users
+	mmd -i fat32.img ::Users/budchirp
+	mmd -i fat32.img ::Users/budchirp/Binaries
+	mmd -i fat32.img ::Users/budchirp/Home
+	mmd -i fat32.img ::Users/budchirp/Applications
+	mmd -i fat32.img ::Config
 	echo "Hello from FAT32 NVMe!" > hello_nvme.txt
 	mcopy -i fat32.img hello_nvme.txt ::HELLO.TXT
 	rm hello_nvme.txt
+	echo -e "root:0\nbudchirp:1000" > users.txt
+	mcopy -i fat32.img users.txt ::Config/users
+	rm users.txt
+	mcopy -i fat32.img $(BUILD_DIR)/bin/init/init ::System/Binaries/init
+	mcopy -i fat32.img $(BUILD_DIR)/bin/login/login ::System/Binaries/login
+	mcopy -i fat32.img $(BUILD_DIR)/bin/shell/shell ::System/Binaries/shell
+	mcopy -i fat32.img $(BUILD_DIR)/bin/cat/cat ::System/Binaries/cat
+	mcopy -i fat32.img $(BUILD_DIR)/bin/whoami/whoami ::System/Binaries/whoami
+	mcopy -i fat32.img $(USER_ELF) ::Users/budchirp/Binaries/example
 
 clean:
 	rm -rf cmake-build-* esp_* fat32.img

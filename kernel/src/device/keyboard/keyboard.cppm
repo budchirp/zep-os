@@ -5,12 +5,16 @@ module;
 export module zep.device.keyboard;
 
 import zep.std.types;
+import zep.std.string_view;
+import zep.std;
 
-extern "C" void print(string str);
+extern "C" u8 inb(u16 port);
+extern "C" void thread_yield();
 
 export class Keyboard {
   private:
     static inline bool shift_pressed = false;
+    static inline char last_key = 0;
 
     static inline const char scancode_map[128] = {
         0,   27,  '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', '\b',
@@ -45,9 +49,29 @@ export class Keyboard {
         if (scancode < 128) {
             char c = shift_pressed ? scancode_map_shift[scancode] : scancode_map[scancode];
             if (c != 0) {
-                char str[2] = {c, '\0'};
-                print(str);
+                last_key = c;
+                print(StringView(&c, 1));
             }
         }
+    }
+
+    static char get_char() {
+        while (last_key == 0) {
+            // Check COM1 Line Status Register (bit 0 = Data Ready)
+            if ((inb(0x3F8 + 5) & 1) != 0) {
+                u8 val = inb(0x3F8);
+                char c = static_cast<char>(val);
+                if (c == '\r') {
+                    c = '\n';
+                }
+                // Echo serial input
+                print(StringView(&c, 1));
+                return c;
+            }
+            thread_yield();
+        }
+        char c = last_key;
+        last_key = 0;
+        return c;
     }
 };

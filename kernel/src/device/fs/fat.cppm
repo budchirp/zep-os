@@ -137,53 +137,125 @@ export class Fat32FileSystem : public FileSystemDriver {
         dest_node_name[index] = '\0';
     }
 
-    bool find_dir_entry(StringView name, FatDirEntry& out_entry, usize& out_sector,
+    bool find_dir_entry(StringView path, FatDirEntry& out_entry, usize& out_sector,
                         usize& out_offset) {
         if (device == nullptr) {
             return false;
         }
 
-        u8 sector_buffer[512];
+        StringView p = path;
+        if (p.starts_with(StringView("/"))) {
+            p = StringView(p.data + 1, p.length() - 1);
+        }
+
         u32 current_cluster = bpb.root_cluster;
+        u8 sector_buffer[512];
 
-        while (current_cluster < 0x0FFFFFF8) {
-            for (usize sector_offset = 0; sector_offset < sectors_per_cluster; ++sector_offset) {
-                usize current_sector =
-                    data_start_sector + (current_cluster - 2) * sectors_per_cluster + sector_offset;
-
-                if (device->read(current_sector * bytes_per_sector, sector_buffer,
-                                 bytes_per_sector) != bytes_per_sector) {
-                    return false;
-                }
-
-                auto* entries = reinterpret_cast<FatDirEntry*>(sector_buffer);
-                usize entries_per_sector = bytes_per_sector / sizeof(FatDirEntry);
-
-                for (usize i = 0; i < entries_per_sector; ++i) {
-                    if (entries[i].name[0] == 0x00) {
-                        return false;
-                    }
-
-                    if (entries[i].name[0] == 0xE5) {
-                        continue;
-                    }
-
-                    char node_name[16] = {0};
-                    format_name(entries[i].name, entries[i].extension, node_name);
-
-                    if (StringView(node_name).equals(name)) {
-                        out_entry = entries[i];
-                        out_sector = current_sector;
-                        out_offset = i * sizeof(FatDirEntry);
-                        return true;
-                    }
+        usize start = 0;
+        while (start < p.length()) {
+            usize end = p.length();
+            for (usize i = start; i < p.length(); ++i) {
+                if (p.data[i] == '/') {
+                    end = i;
+                    break;
                 }
             }
 
-            current_cluster = read_fat_entry(current_cluster);
+            StringView segment(p.data + start, end - start);
+            start = end + 1;
+
+            if (segment.length() == 0) {
+                continue;
+            }
+
+            bool found_segment = false;
+            u32 search_cluster = current_cluster;
+
+            while (search_cluster < 0x0FFFFFF8) {
+                for (usize sector_offset = 0; sector_offset < sectors_per_cluster; ++sector_offset) {
+                    usize current_sector =
+                        data_start_sector + (search_cluster - 2) * sectors_per_cluster + sector_offset;
+
+                    if (device->read(current_sector * bytes_per_sector, sector_buffer,
+                                     bytes_per_sector) != bytes_per_sector) {
+                        return false;
+                    }
+
+                    auto* entries = reinterpret_cast<FatDirEntry*>(sector_buffer);
+                    usize entries_per_sector = bytes_per_sector / sizeof(FatDirEntry);
+
+                    for (usize i = 0; i < entries_per_sector; ++i) {
+                        if (entries[i].name[0] == 0x00) {
+                            goto next_cluster;
+                        }
+
+                        if (entries[i].name[0] == 0xE5) {
+                            continue;
+                        }
+
+                        if ((entries[i].attributes & 0x08) != 0) {
+                            continue;
+                        }
+
+                        char node_name[16] = {0};
+                        format_name(entries[i].name, entries[i].extension, node_name);
+
+                        auto char_equal_ci = [](char a, char b) -> bool {
+                            if (a >= 'a' && a <= 'z') {
+                                a -= 32;
+                            }
+                            if (b >= 'a' && b <= 'z') {
+                                b -= 32;
+                            }
+                            return a == b;
+                        };
+
+                        StringView node_sv(node_name);
+                        bool matches = (node_sv.length() == segment.length());
+                        if (matches) {
+                            for (usize char_idx = 0; char_idx < node_sv.length(); ++char_idx) {
+                                if (!char_equal_ci(node_sv.data[char_idx], segment.data[char_idx])) {
+                                    matches = false;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (matches) {
+                            out_entry = entries[i];
+                            out_sector = current_sector;
+                            out_offset = i * sizeof(FatDirEntry);
+                            found_segment = true;
+                            break;
+                        }
+                    }
+                    if (found_segment) {
+                        break;
+                    }
+                }
+                if (found_segment) {
+                    break;
+                }
+            next_cluster:
+                search_cluster = read_fat_entry(search_cluster);
+            }
+
+            if (!found_segment) {
+                return false;
+            }
+
+            if (start < p.length()) {
+                if ((out_entry.attributes & 0x10) == 0) {
+                    return false;
+                }
+                current_cluster = (static_cast<u32>(out_entry.first_cluster_high) << 16) | out_entry.first_cluster_low;
+                if (current_cluster == 0) {
+                    current_cluster = bpb.root_cluster;
+                }
+            }
         }
 
-        return false;
+        return true;
     }
 
   public:

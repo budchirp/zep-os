@@ -61,10 +61,6 @@ file(GLOB_RECURSE KERNEL_ARCH_SOURCES
     src/${KERNEL_ARCH_DIR}/*.cpp
 )
 
-set(ZEP_OBJ
-    ${CMAKE_CURRENT_SOURCE_DIR}/zep/build/${ZEP_ARCH}-unknown-none/objs/kernel.o
-)
-
 if(DEFINED KERNEL_RELOC_C)
     add_library(reloc_obj OBJECT ${KERNEL_RELOC_C})
 
@@ -101,12 +97,10 @@ target_include_directories(kernel_so PRIVATE
 
 zep_set_kernel_flags(kernel_so "${KERNEL_TARGET}" "${KERNEL_LINKER_SCRIPT}")
 
+target_link_libraries(kernel_so PRIVATE common)
+
 if(DEFINED KERNEL_RELOC_C)
     target_link_libraries(kernel_so PRIVATE reloc_obj)
-endif()
-
-if(EXISTS "${ZEP_OBJ}")
-    target_link_libraries(kernel_so PRIVATE "${ZEP_OBJ}")
 endif()
 
 add_custom_command(TARGET kernel_so POST_BUILD

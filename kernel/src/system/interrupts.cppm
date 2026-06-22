@@ -5,6 +5,9 @@ module;
 export module zep.system.interrupts;
 
 import zep.std.types;
+import zep.std.string_view;
+import zep.std;
+import zep.arch;
 import zep.device.keyboard;
 
 export class [[gnu::packed]] IdtEntry {
@@ -42,16 +45,6 @@ export class InterruptFrame {
 alignas(16) static IdtEntry idt[256];
 static IdtDescriptor idtr;
 
-static inline u8 inb(u16 port) {
-    u8 value;
-    __asm__ volatile("inb %1, %0" : "=a"(value) : "Nd"(port));
-    return value;
-}
-
-static inline void outb(u16 port, u8 value) {
-    __asm__ volatile("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
 static void remap_pic() {
     outb(0x20, 0x11);
     outb(0xA0, 0x11);
@@ -76,8 +69,6 @@ extern "C" __attribute__((interrupt)) void keyboard_handler(InterruptFrame* fram
     outb(0x20, 0x20);
 }
 
-extern "C" void print(string str);
-
 static void print_hex(u64 val) {
     char buf[19];
     buf[0] = '0';
@@ -87,25 +78,23 @@ static void print_hex(u64 val) {
         buf[2 + i] = (nibble < 10) ? ('0' + nibble) : ('A' + (nibble - 10));
     }
     buf[18] = '\0';
-    print(buf);
+    print(StringView(buf, 18));
 }
 
-extern "C" __attribute__((interrupt)) void page_fault_handler(InterruptFrame* frame, u64 error_code) {
+extern "C" __attribute__((interrupt)) void page_fault_handler(InterruptFrame* frame,
+                                                              u64 error_code) {
     (void)frame;
-    u64 fault_addr;
-    __asm__ volatile("mov %%cr2, %0" : "=r"(fault_addr));
+    u64 fault_addr = read_cr2();
 
-    print("!!! PAGE FAULT at ");
+    print(StringView("!!! PAGE FAULT at "));
     print_hex(fault_addr);
-    print(" error ");
+    print(StringView(" error "));
     print_hex(error_code);
-    print(" !!!\n");
+    print(StringView(" !!!\n"));
 
-    print("!!! UNHANDLED PAGE FAULT - halting !!!\n");
+    print(StringView("!!! UNHANDLED PAGE FAULT - halting !!!\n"));
 
-    while (true) {
-        __asm__ volatile("hlt");
-    }
+    halt();
 }
 
 export class InterruptManager {
@@ -124,8 +113,8 @@ export class InterruptManager {
         idtr.limit = sizeof(idt) - 1;
         idtr.base = reinterpret_cast<u64>(idt);
 
-        __asm__ volatile("lidt %0" : : "m"(idtr));
-        __asm__ volatile("sti");
+        load_idt(&idtr);
+        enable_interrupts();
     }
 
     static void set_handler(u8 vector, u64 handler, u8 type_attr) {

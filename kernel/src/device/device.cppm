@@ -13,7 +13,7 @@ export class Device {
     Device() = default;
     virtual ~Device() {}
 
-    virtual string name() = 0;
+    virtual StringView name() = 0;
 
     virtual usize read(usize offset, u8* dest, usize size) {
         (void)offset;
@@ -42,7 +42,7 @@ export class DeviceManager {
             return false;
         }
 
-        return devices.insert(StringView(device->name()), static_cast<void*>(device));
+        return devices.insert(device->name(), static_cast<void*>(device));
     }
 
     bool add(StringView name, void* ptr) {

@@ -11,5 +11,13 @@ set_property(CACHE ZEP_ARCH PROPERTY STRINGS x86_64 aarch64)
 
 include(cmake/Standards.cmake)
 include(cmake/Flags.cmake)
+include(cmake/userspace.cmake)
 
+add_subdirectory(common)
+add_subdirectory(libc)
+add_subdirectory(bin/init)
+add_subdirectory(bin/login)
+add_subdirectory(bin/shell)
+add_subdirectory(bin/cat)
+add_subdirectory(bin/whoami)
 add_subdirectory(kernel)

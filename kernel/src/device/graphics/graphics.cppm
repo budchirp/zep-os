@@ -11,6 +11,7 @@ import zep.gfx.renderer;
 import zep.gfx.terminal;
 import zep.context;
 import zep.common.logger;
+import zep.std.string_view;
 import zep.device;
 import zep.boot.info;
 
@@ -18,7 +19,7 @@ export void init_graphics(BootInfo* boot_info) {
     auto* context = get_context();
 
     if (boot_info->framebuffer.address == nullptr) {
-        context->logger->log("no framebuffer");
+        context->logger->log(StringView("no framebuffer"));
         return;
     }
 
@@ -28,7 +29,7 @@ export void init_graphics(BootInfo* boot_info) {
 
     u8* back = new u8[pitch * resolution.y];
     if (back == nullptr) {
-        context->logger->log("Failed to allocate back buffer");
+        context->logger->log(StringView("Failed to allocate back buffer"));
         return;
     }
 
@@ -39,5 +40,5 @@ export void init_graphics(BootInfo* boot_info) {
     context->renderer = init_renderer(framebuffer);
     context->logger->terminal = init_terminal(context->renderer, framebuffer->size());
 
-    context->logger->log("framebuffer up");
+    context->logger->log(StringView("framebuffer up"));
 }

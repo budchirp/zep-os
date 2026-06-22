@@ -7,7 +7,9 @@ export module zep.memory.vmm;
 import zep.std.types;
 import zep.context;
 import zep.memory;
+import zep.std.string_view;
 import zep.boot.info;
+import zep.arch;
 
 export class PageTable {
   public:
@@ -27,10 +29,49 @@ static PageTable* allocate_page_table() {
     return table;
 }
 
+export PageTable* clone_pml4(PageTable* src) {
+    PageTable* dest = allocate_page_table();
+    for (usize i = 0; i < 512; ++i) {
+        dest->entries[i] = src->entries[i];
+    }
+
+    if ((src->entries[0] & 1) != 0) {
+        PageTable* src_pdpt = reinterpret_cast<PageTable*>(src->entries[0] & ~0xFFFULL);
+        PageTable* dest_pdpt = allocate_page_table();
+        for (usize i = 0; i < 512; ++i) {
+            dest_pdpt->entries[i] = src_pdpt->entries[i];
+        }
+        dest->entries[0] = reinterpret_cast<u64>(dest_pdpt) | (src->entries[0] & 0xFFF);
+
+        if ((dest_pdpt->entries[0] & 1) != 0) {
+            PageTable* src_pd = reinterpret_cast<PageTable*>(dest_pdpt->entries[0] & ~0xFFFULL);
+            PageTable* dest_pd = allocate_page_table();
+            for (usize i = 0; i < 512; ++i) {
+                dest_pd->entries[i] = src_pd->entries[i];
+            }
+            dest_pdpt->entries[0] = reinterpret_cast<u64>(dest_pd) | (dest_pdpt->entries[0] & 0xFFF);
+
+            for (usize i = 0; i < 4; ++i) {
+                if ((dest_pd->entries[i] & 1) != 0) {
+                    PageTable* src_pt = reinterpret_cast<PageTable*>(dest_pd->entries[i] & ~0xFFFULL);
+                    PageTable* dest_pt = allocate_page_table();
+                    for (usize k = 0; k < 512; ++k) {
+                        dest_pt->entries[k] = src_pt->entries[k];
+                    }
+                    dest_pd->entries[i] = reinterpret_cast<u64>(dest_pt) | (dest_pd->entries[i] & 0xFFF);
+                }
+            }
+        }
+    }
+
+    return dest;
+}
+
+static PageTable* active_pml4 = nullptr;
+
 export class PageTableManager {
   private:
     PageTable* pml4 = nullptr;
-    static inline PageTable* active_pml4 = nullptr;
 
   public:
     explicit PageTableManager(PageTable* pml4) : pml4(pml4) {}
@@ -83,13 +124,13 @@ static bool is_safe_ram_type(u32 type) {
 export void init_vmm(BootInfo* boot_info) {
     auto* logger = get_context()->logger;
 
-    logger->log("VMM: Allocating active PML4...");
+    logger->log(StringView("VMM: Allocating active PML4..."));
     auto* pml4 = allocate_page_table();
     PageTableManager::set_active_pml4(pml4);
 
     PageTableManager manager(pml4);
 
-    logger->log("VMM: Mapping memory map entries...");
+    logger->log(StringView("VMM: Mapping memory map entries..."));
     auto* memory_map = get_memory_map();
     for (usize i = 0; i < memory_map->count(); ++i) {
         auto* entry = memory_map->get(i);
@@ -106,22 +147,22 @@ export void init_vmm(BootInfo* boot_info) {
 
         for (u64 p = 0; p < pages; ++p) {
             u64 addr = base + p * 4096;
-            manager.map_page(addr, addr, 3);
+            manager.map_page(addr, addr, 7);
         }
     }
 
-    logger->log("VMM: Mapping framebuffer...");
+    logger->log(StringView("VMM: Mapping framebuffer..."));
     u64 fb_addr = reinterpret_cast<u64>(boot_info->framebuffer.address);
     u64 fb_size = boot_info->framebuffer.height * boot_info->framebuffer.pitch;
     u64 fb_pages = (fb_size + 4095) / 4096;
 
     for (u64 p = 0; p < fb_pages; ++p) {
         u64 addr = fb_addr + p * 4096;
-        manager.map_page(addr, addr, 3);
+        manager.map_page(addr, addr, 7);
     }
 
-    logger->log("VMM: Loading CR3...");
+    logger->log(StringView("VMM: Loading CR3..."));
     u64 active_pml4_phys = reinterpret_cast<u64>(pml4);
-    __asm__ volatile("mov %0, %%cr3" : : "r"(active_pml4_phys) : "memory");
-    logger->log("VMM: CR3 loaded successfully");
+    load_page_table(active_pml4_phys);
+    logger->log(StringView("VMM: CR3 loaded successfully"));
 }

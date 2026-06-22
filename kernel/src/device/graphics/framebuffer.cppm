@@ -6,6 +6,7 @@ export module zep.device.graphics.framebuffer;
 
 import zep.device;
 import zep.std.types;
+import zep.std.string_view;
 import zep.std.math;
 
 export class Framebuffer : public Device {
@@ -26,7 +27,7 @@ export class Framebuffer : public Device {
 
     ~Framebuffer() override = default;
 
-    string name() override { return "framebuffer"; }
+    StringView name() override { return StringView("framebuffer"); }
 
     void write(Vec2u64 position, u32 color) {
         if (position.x >= resolution.x || position.y >= resolution.y) {

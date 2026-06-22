@@ -6,6 +6,7 @@ export module zep.device.nvme;
 
 import zep.device;
 import zep.std.types;
+import zep.std.string_view;
 
 export class NvmeDriver : public Device {
   private:
@@ -22,7 +23,7 @@ export class NvmeDriver : public Device {
 
     ~NvmeDriver() override { delete[] bounce_buffer; }
 
-    string name() override { return "nvme"; }
+    StringView name() override { return StringView("nvme"); }
 
     usize read(usize offset, u8* dest, usize size) override {
         if (size == 0 || ram_disk == nullptr) {

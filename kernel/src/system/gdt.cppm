@@ -5,6 +5,7 @@ module;
 export module zep.system.gdt;
 
 import zep.std.types;
+import zep.arch;
 
 export class [[gnu::packed]] GdtEntry {
   public:
@@ -33,8 +34,8 @@ export class [[gnu::packed]] GdtTable {
     GdtEntry null_desc{};
     GdtEntry kernel_code{};
     GdtEntry kernel_data{};
-    GdtEntry user_code{};
     GdtEntry user_data{};
+    GdtEntry user_code{};
     TssEntry tss_desc{};
 };
 
@@ -91,23 +92,8 @@ export class GdtManager {
         gdtr.limit = sizeof(GdtTable) - 1;
         gdtr.base = reinterpret_cast<u64>(&gdt_table);
 
-        __asm__ volatile("lgdt %0" : : "m"(gdtr));
+        load_gdt(&gdtr);
 
-        __asm__ volatile(
-            "mov $0x10, %%ax\n"
-            "mov %%ax, %%ds\n"
-            "mov %%ax, %%es\n"
-            "mov %%ax, %%fs\n"
-            "mov %%ax, %%gs\n"
-            "mov %%ax, %%ss\n"
-            "pushq $0x08\n"
-            "leaq 1f(%%rip), %%rax\n"
-            "pushq %%rax\n"
-            "lretq\n"
-            "1:\n"
-            : : : "rax", "memory"
-        );
-
-        __asm__ volatile("ltr %%ax" : : "a"(static_cast<u16>(0x28)));
+        load_tss(static_cast<u16>(0x28));
     }
 };
